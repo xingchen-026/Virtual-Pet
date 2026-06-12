@@ -37,7 +37,19 @@ VirtualPet/
 │   ├── interaction.py         # 用户交互管理（点击 / 拖拽 / 按键）
 │   ├── action.py              # 宠物行为动作与 BehaviorManager
 │   ├── food.py                # 食物数据结构（喂食系统）
-│   └── feedback.py            # 交互提示 UI（自动消失的提示文字）
+│   ├── feedback.py            # 交互提示 UI（自动消失的提示文字）
+│   ├── desktop.py             # 桌面窗口能力（透明 / 置顶 / 隐藏 / 移动）
+│   └── ai/
+│       ├── llm_client.py       # LLM 接口封装（OpenAI / DeepSeek / 本地）
+│       ├── personality.py      # 宠物人格系统
+│       ├── memory.py           # 宠物记忆系统（短期对话 + 长期事件）
+│       ├── prompt_manager.py   # Prompt 拼接（System + Pet State + Memory + User）
+│       ├── emotion_analyzer.py # 文本情绪分析 -> 属性变化 / 建议动画
+│       └── ai_service.py       # AI 服务入口（Pet -> AIService -> LLM）
+│
+├── ui/
+│   ├── chat_window.py        # AI 对话窗口（输入框 / 消息历史 / 滚动）
+│   └── message_box.py        # 聊天消息气泡渲染
 │
 ├── assets/
 │   ├── images/               # 图片资源
@@ -53,13 +65,18 @@ VirtualPet/
 │   └── sounds/               # 音频资源
 │
 ├── data/
-│   └── pet_data.json         # 宠物数据存储
+│   ├── pet_data.json         # 宠物数据存储
+│   ├── personality.json      # 宠物人格数据（名称 + 人格参数）
+│   └── memory.json           # 宠物记忆数据（短期对话 + 长期事件）
 │
 ├── tools/
 │   └── generate_placeholder_animations.py  # 占位动画素材生成脚本
 │
 ├── utils/
-│   └── helper.py             # 工具函数
+│   ├── helper.py             # 工具函数（JSON 读写等）
+│   ├── exception.py          # 自定义异常与错误日志
+│   ├── behavior_logger.py    # 自主行为日志
+│   └── tray.py               # 系统托盘图标
 │
 └── README.md
 ```
@@ -72,11 +89,22 @@ VirtualPet/
    pip install pygame
    ```
 
-2. 运行程序：
+2. （可选）配置 AI 对话功能：
+
+   - 编辑 `config/ai_config.json`，设置 `provider`（`openai` / `deepseek` / `local`）、
+     `model`、`api_base` 等参数。
+   - 设置对应的 API Key 环境变量（默认 `DEEPSEEK_API_KEY`，对应
+     `ai_config.json` 中的 `api_key_env`）。
+   - 未配置或网络不可用时，AI 对话自动降级为离线提示，桌宠核心功能不受影响。
+
+3. 运行程序：
 
    ```
    python main.py
    ```
+
+   - 按 `C` 打开/关闭 AI 对话窗口，输入文字后按 `Enter` 发送，`Esc` 关闭窗口。
+   - 按 `F` 喂食、`P` 玩耍，拖拽宠物可移动窗口位置。
 
 ## 当前完成阶段
 
@@ -144,10 +172,52 @@ VirtualPet/
 - 数据流：`User Input -> InteractionManager -> BehaviorManager ->
   Pet Attribute -> StateMachine -> AnimationManager`
 
+**第五阶段：自主行为系统**
+
+- 新增 `core/autonomous.py`：`AutonomousManager` 根据 Pet 属性与时间表自主决策
+  行为（漫游 / 休息 / 玩耍等），与用户交互（拖拽）互斥，避免冲突
+- 引入昼夜节奏（`Schedule`）与情绪（`Emotion`），影响行为决策权重
+- `utils/behavior_logger.py`：记录自主行为日志，便于调试与回放
+- 数据流：`Pet State -> AutonomousManager -> Behavior Decision -> Action Execute
+  -> Animation Update`
+
+**第六阶段：桌面应用能力**
+
+- 新增 `core/desktop.py`：`DesktopManager` 封装窗口透明色键 / 置顶 / 隐藏 /
+  显示 / 移动等 OS 能力（Windows），不支持的平台自动降级
+- 窗口改为 `pygame.NOFRAME` 无边框窗口，配合透明色键实现"只显示宠物本体"
+  的桌面悬浮效果；拖拽时整窗随鼠标移动
+- 新增 `utils/tray.py`：`TrayIcon` 系统托盘图标（显示/隐藏/保存/退出），
+  在独立线程运行，动作通过队列回传主循环处理
+- 新增 `utils/exception.py`：统一异常类型（`ResourceLoadError` /
+  `AnimationLoadError` / `SaveDataError` / `DesktopWindowError` 等）与
+  `log_exception()`，错误写入 `logs/error.log`
+- 后台隐藏时主循环降帧（`BACKGROUND_FPS`）以降低 CPU 占用
+
+**第七阶段：AI 对话 / 人格 / 记忆系统**
+
+- 新增 `core/ai/`：`LLMClient`（统一 `chat()` 接口，支持 OpenAI / DeepSeek /
+  本地，供应商与参数全部来自 `config/ai_config.json`，不硬编码）、
+  `PersonalityManager`（人格参数 `data/personality.json`）、
+  `MemoryManager`（短期对话 + 长期事件，`data/memory.json`）、
+  `PromptManager`（拼接 System Prompt + Pet State + Memory + User Message）、
+  `EmotionAnalyzer`（关键词规则 + AI 回复情绪标签 `[情绪:xxx]`，输出
+  mood/energy 变化与建议动画）、`AIService`（唯一对外入口：
+  `Pet -> AIService -> LLM`）
+- 新增 `ui/chat_window.py` + `ui/message_box.py`：按 `C` 打开/关闭的对话窗口
+  （输入框 / 消息气泡历史 / 鼠标滚轮滚动）
+- `Game` 集成：聊天消息在后台线程调用 `AIService.chat()`，结果经
+  `queue.Queue` 回传主循环写回对话窗口，避免阻塞动画与置顶维护；
+  交互事件（喂食等）通过 `AIService.notify_interaction()` 写入长期记忆
+- 情绪联动示例："你好可爱" -> `mood +10`；"你累了吗？" -> `energy -5` 并
+  播放 `sleep` 临时动画
+- 新增 `utils/exception.AIServiceError`：LLM 请求失败 / 网络异常 / 返回
+  格式错误统一捕获，记录日志后降级为离线回复，桌宠核心功能不受影响
+
 ## 后续开发计划
 
-- 桌宠透明窗口与窗口置顶显示
 - 喂食 / 玩耍的图形化交互入口（按钮、拖放道具等）
 - 可扩展的宠物养成系统（BathAction / SleepAction / GiftAction 等）
 - 接入正式美术资源 / Lottie 动画，替换占位动画帧
 - 为 SAD 等新状态补充专属动画资源
+- AI 情绪标签体系扩展、长期记忆摘要与遗忘策略
