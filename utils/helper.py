@@ -7,17 +7,24 @@
 import json
 import os
 
+from utils.exception import SaveDataError, log_exception
+
 
 def load_json(file_path):
     """读取 JSON 文件并返回字典数据。
 
-    如果文件不存在，返回 None。
+    如果文件不存在，或文件内容损坏无法解析，均返回 None
+    （调用方据此使用默认数据，程序不会因存档损坏而崩溃）。
     """
     if not os.path.exists(file_path):
         return None
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        log_exception(SaveDataError(f"读取 JSON 文件失败 ({file_path}): {exc}"))
+        return None
 
 
 def save_json(file_path, data):

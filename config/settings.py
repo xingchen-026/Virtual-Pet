@@ -19,11 +19,23 @@ BEHAVIOR_CONFIG_FILE = os.path.join(BASE_DIR, "config", "behavior_config.json")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 PET_BEHAVIOR_LOG_FILE = os.path.join(LOGS_DIR, "pet_behavior.log")
 
+# 桌面窗口参数配置文件（透明/置顶/初始位置等，禁止硬编码）
+DESKTOP_CONFIG_FILE = os.path.join(BASE_DIR, "config", "desktop_config.json")
+
 # ----- 窗口配置 -----
 WINDOW_WIDTH = 480
 WINDOW_HEIGHT = 480
 WINDOW_TITLE = "桌面虚拟宠物"
 FPS = 60
+
+# 窗口隐藏（最小化到托盘）时使用的低帧率，降低后台运行时的 CPU 占用
+BACKGROUND_FPS = 5
+
+# 窗口背景透明色键：填充该颜色的区域会被 DesktopManager 设为透明
+TRANSPARENT_COLOR_KEY = (255, 0, 255)
+
+# 维持窗口置顶状态的检查间隔（秒）。避免每帧调用系统 API 影响性能。
+TOPMOST_REFRESH_INTERVAL = 2.0
 
 # ----- 宠物属性数值范围 -----
 ATTRIBUTE_MIN = 0
