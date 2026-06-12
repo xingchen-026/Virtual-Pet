@@ -1,0 +1,18 @@
+{
+    "name": "cat",
+    "source": "Gemini_Generated_Image_xpivjsxpivjsxpiv.png",
+    "states": {
+        "idle": 6,
+        "happy": 5,
+        "walk": 6,
+        "run": 6,
+        "playing": 6,
+        "excited": 1,
+        "look_around": 1,
+        "tired": 1,
+        "sleep": 1,
+        "interact": 1,
+        "hungry": 2,
+        "eating": 1
+    }
+}

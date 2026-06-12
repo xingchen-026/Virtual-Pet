@@ -29,6 +29,14 @@ AI_CONFIG_FILE = os.path.join(BASE_DIR, "config", "ai_config.json")
 PERSONALITY_FILE = os.path.join(DATA_DIR, "personality.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 
+# ----- 皮肤配置 -----
+# 用户导入的皮肤目录与当前皮肤配置文件
+SKINS_DIR = os.path.join(ASSETS_DIR, "skins")
+SKIN_CONFIG_FILE = os.path.join(BASE_DIR, "config", "skin_config.json")
+
+# 皮肤帧统一输出尺寸（导入时归一化，与窗口大小匹配）
+SKIN_FRAME_SIZE = (128, 128)
+
 # ----- 窗口配置 -----
 WINDOW_WIDTH = 480
 WINDOW_HEIGHT = 480

@@ -66,6 +66,7 @@ from core.feedback import FeedbackOverlay
 from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
+from core.skin import SkinManager
 from core.sprite import PetSprite
 from ui.chat_window import ChatWindow
 from ui.stats_panel import StatsPanel
@@ -109,6 +110,10 @@ class Game:
         self.running = True
 
         self.resource_manager = ResourceManager()
+
+        # 皮肤系统：根据 config/skin_config.json 决定动画帧来源，
+        # 皮肤未覆盖的状态自动回退到内置动画（assets/animations/）
+        self.skin_manager = SkinManager()
 
         # 启动时尝试从 JSON 存档读取宠物数据，不存在或损坏则使用默认属性
         pet_data = load_json(settings.PET_DATA_FILE)
@@ -162,10 +167,17 @@ class Game:
         )
 
     def _build_animation_manager(self) -> AnimationManager:
-        """根据配置加载各动画状态的帧资源，构建 AnimationManager。"""
+        """根据配置加载各动画状态的帧资源，构建 AnimationManager。
+
+        优先使用当前皮肤（SkinManager）提供的帧目录，
+        皮肤未覆盖的状态回退到内置动画目录。
+        """
         animations = {}
         for state in AnimationState:
-            folder = settings.ANIMATION_FOLDERS[state.value]
+            folder = (
+                self.skin_manager.animation_dir(state.value)
+                or settings.ANIMATION_FOLDERS[state.value]
+            )
             frame_duration = settings.ANIMATION_FRAME_DURATIONS[state.value]
             frames = self.resource_manager.load_animation(folder)
             animations[state] = Animation(frames, frame_duration=frame_duration)

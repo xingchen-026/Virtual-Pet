@@ -70,12 +70,14 @@ VirtualPet/
 │   └── memory.json           # 宠物记忆数据（短期对话 + 长期事件）
 │
 ├── tools/
-│   └── generate_placeholder_animations.py  # 占位动画素材生成脚本
+│   ├── generate_placeholder_animations.py  # 占位动画素材生成脚本
+│   └── import_skin.py        # 皮肤导入工具（精灵图切分/去背景）
 │
 ├── utils/
 │   ├── helper.py             # 工具函数（JSON 读写等）
 │   ├── exception.py          # 自定义异常与错误日志
 │   ├── behavior_logger.py    # 自主行为日志
+│   ├── spritesheet.py        # 精灵图切分（背景检测/去除/帧归一化）
 │   └── tray.py               # 系统托盘图标
 │
 └── README.md
@@ -104,7 +106,34 @@ VirtualPet/
    ```
 
    - 按 `C` 打开/关闭 AI 对话窗口，输入文字后按 `Enter` 发送，`Esc` 关闭窗口。
-   - 按 `F` 喂食、`P` 玩耍，拖拽宠物可移动窗口位置。
+   - 按 `F` 喂食、`P` 玩耍，拖拽宠物可移动窗口位置，右键宠物查看数值面板。
+
+4. （可选）导入自定义皮肤：
+
+   准备一张精灵图（每行一个动作的多帧动画，背景为纯色即可，不要求透明），运行：
+
+   ```
+   python tools/import_skin.py 精灵图.png --name 皮肤名 --states idle,happy,walk
+   ```
+
+   - `--states` 按行从上到下指定每行对应的动画状态（可用状态见
+     `config/settings.py` 的 `ANIMATION_FOLDERS`）。
+   - 每个单元格是独立姿势/表情的素材（如情绪表情图）使用网格模式：
+
+     ```
+     python tools/import_skin.py 表情图.png --name 皮肤名 --grid 3x6 \
+         --states excited,look_around,tired,skip,...,hungry,hungry,eating
+     ```
+
+     `--states` 按行优先顺序逐格指定状态（`skip` 跳过该格；同一状态
+     出现多次时按顺序组成多帧动画），网格模式会自动剔除相邻单元格
+     精灵越界产生的贴边碎片。
+   - 工具自动检测背景色并去除背景、切分帧、统一尺寸后写入
+     `assets/skins/<皮肤名>/`，并设为当前皮肤（重启桌宠生效）；
+     向同名皮肤多次导入时按状态合并（本次涉及的状态清空重写）。
+   - 皮肤未覆盖的动画状态自动回退到内置动画；切回默认皮肤可将
+     `config/skin_config.json` 的 `active_skin` 改为 `"default"`。
+   - 背景与主体颜色接近导致切分/去背景异常时，用 `--tolerance` 调节阈值。
 
 ## 当前完成阶段
 

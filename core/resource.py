@@ -51,8 +51,10 @@ class ResourceManager:
         return image
 
     def load_animation(self, folder_name: str, convert_alpha: bool = True) -> List[pygame.Surface]:
-        """加载 assets/animations/<folder_name> 目录下的全部帧图片并缓存。
+        """加载动画帧目录下的全部帧图片并缓存。
 
+        folder_name 为相对名称时指向 assets/animations/<folder_name>，
+        为绝对路径时直接使用（用于加载用户导入的皮肤目录）。
         目录内的图片按文件名排序后依次作为动画帧，
         因此帧文件建议使用 frame_00.png、frame_01.png ... 的命名方式。
         目录缺失、为空或图片加载失败时记录日志，并返回单帧占位动画，
@@ -61,7 +63,10 @@ class ResourceManager:
         if folder_name in self._animation_cache:
             return self._animation_cache[folder_name]
 
-        animation_dir = os.path.join(settings.ASSETS_DIR, "animations", folder_name)
+        if os.path.isabs(folder_name):
+            animation_dir = folder_name
+        else:
+            animation_dir = os.path.join(settings.ASSETS_DIR, "animations", folder_name)
         try:
             frame_names = sorted(
                 name for name in os.listdir(animation_dir)
