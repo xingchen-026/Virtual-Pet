@@ -29,6 +29,19 @@ AI_CONFIG_FILE = os.path.join(BASE_DIR, "config", "ai_config.json")
 PERSONALITY_FILE = os.path.join(DATA_DIR, "personality.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 
+# ----- 用户偏好配置 -----
+# 设置窗口可修改的用户偏好（宠物大小等）
+USER_CONFIG_FILE = os.path.join(BASE_DIR, "config", "user_config.json")
+
+# 宠物缩放倍数的取值范围与调节步长
+PET_SCALE_MIN = 0.5
+PET_SCALE_MAX = 2.0
+PET_SCALE_STEP = 0.1
+PET_SCALE_DEFAULT = 1.0
+
+# 交互引起的属性变化在数值面板中以 +xx/-xx 形式显示的持续时间（秒）
+ATTR_DELTA_DURATION = 2.5
+
 # ----- 皮肤配置 -----
 # 用户导入的皮肤目录与当前皮肤配置文件
 SKINS_DIR = os.path.join(ASSETS_DIR, "skins")
@@ -38,8 +51,11 @@ SKIN_CONFIG_FILE = os.path.join(BASE_DIR, "config", "skin_config.json")
 SKIN_FRAME_SIZE = (128, 128)
 
 # ----- 窗口配置 -----
-WINDOW_WIDTH = 480
-WINDOW_HEIGHT = 480
+# 窗口需为居中的宠物（最大 2.0x 缩放约 256px）两侧留出
+# 足够空间放置数值面板/设置窗口，避免弹窗遮挡宠物本体；
+# 背景为透明色键，窗口大小不影响视觉效果
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
 WINDOW_TITLE = "桌面虚拟宠物"
 FPS = 60
 
@@ -129,10 +145,6 @@ MOOD_DECAY_PER_TICK = 0.2
 # 连续点击触发 excited 状态：window 秒内点击次数达到 threshold 即触发
 EXCITED_CLICK_WINDOW = 1.0
 EXCITED_CLICK_THRESHOLD = 3
-
-# 喂食 / 玩耍功能按键（对应 pygame.key.name() 返回值）
-FEED_KEY = "f"
-PLAY_KEY = "p"
 
 # ----- AI 对话窗口配置 -----
 # 打开/关闭 AI 对话窗口的按键（对应 pygame.key.name() 返回值）

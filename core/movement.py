@@ -29,6 +29,10 @@ class MovementController:
         self.target: Optional[Tuple[float, float]] = None
         self.speed = float(self.config["walk_speed"])
 
+        # 漫游范围（宽, 高）。默认窗口大小；桌面窗口跟随模式下
+        # 由 Game 设置为整个屏幕大小，宠物可在桌面上自由漫游。
+        self.bounds: Tuple[int, int] = (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT)
+
         # 移动过程中的浮点坐标。Pet.position 为整数坐标（供 Sprite/Rect 使用），
         # 若每帧都从中读回作为移动起点，低速移动时的小数步长会被舍入吞掉，
         # 导致位置卡死不再前进。移动期间改为维护此浮点坐标作为唯一来源。
@@ -43,11 +47,15 @@ class MovementController:
         self.target = None
         self._float_position = None
 
+    def set_bounds(self, width: int, height: int) -> None:
+        """设置漫游范围（桌面窗口跟随模式下为屏幕大小）。"""
+        self.bounds = (width, height)
+
     def pick_random_target(self, speed: float) -> Tuple[float, float]:
-        """在窗口范围内随机选取一个目标位置，并设置移动速度。"""
+        """在漫游范围内随机选取一个目标位置，并设置移动速度。"""
         margin = self.config["movement_margin"]
-        x = random.uniform(margin, settings.WINDOW_WIDTH - margin)
-        y = random.uniform(margin, settings.WINDOW_HEIGHT - margin)
+        x = random.uniform(margin, self.bounds[0] - margin)
+        y = random.uniform(margin, self.bounds[1] - margin)
 
         self.target = (x, y)
         self.speed = speed
@@ -68,6 +76,10 @@ class MovementController:
         dx = target_x - current_x
         dy = target_y - current_y
         distance = (dx ** 2 + dy ** 2) ** 0.5
+
+        # 根据水平移动方向更新朝向（素材默认朝右，向左移动时镜像渲染）
+        if abs(dx) > 1.0:
+            self.pet.facing_left = dx < 0
 
         arrival_threshold = self.config["arrival_threshold"]
         if distance <= arrival_threshold:

@@ -145,6 +145,20 @@ class DesktopManager:
         except Exception as exc:
             log_exception(DesktopWindowError(f"显示窗口失败: {exc}"))
 
+    def focus(self) -> None:
+        """将窗口设为前台并获取键盘焦点（打开聊天/设置等输入窗口时调用）。
+
+        桌宠窗口平时以不抢焦点的方式显示/置顶，打开需要键盘输入的
+        窗口时需主动取得焦点，否则按键事件不会送达本窗口。
+        """
+        if not self.supported:
+            return
+
+        try:
+            win32gui.SetForegroundWindow(self._hwnd)
+        except Exception as exc:
+            log_exception(DesktopWindowError(f"窗口获取焦点失败: {exc}"))
+
     def set_position(self, x: int, y: int) -> None:
         """将窗口移动到屏幕坐标 (x, y)（不改变大小与层级）。"""
         if not self.supported:
@@ -170,6 +184,20 @@ class DesktopManager:
         except Exception as exc:
             log_exception(DesktopWindowError(f"读取窗口位置失败: {exc}"))
             return (0, 0)
+
+    def get_screen_size(self) -> Tuple[int, int]:
+        """返回主屏幕分辨率（宽, 高），用于限定宠物在桌面上的漫游范围。"""
+        if not _IS_WINDOWS:
+            return (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT)
+
+        try:
+            return (
+                win32api.GetSystemMetrics(win32con.SM_CXSCREEN),
+                win32api.GetSystemMetrics(win32con.SM_CYSCREEN),
+            )
+        except Exception as exc:
+            log_exception(DesktopWindowError(f"读取屏幕分辨率失败: {exc}"))
+            return (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT)
 
     def get_cursor_position(self) -> Tuple[int, int]:
         """返回鼠标在屏幕坐标系下的位置，用于拖动窗口时计算位移。"""

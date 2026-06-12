@@ -45,6 +45,9 @@ class LLMClient:
         self.temperature: float = config.get("temperature", 0.7)
         self.max_tokens: int = config.get("max_tokens", 500)
         self.timeout: float = config.get("timeout", 10)
+        # API Key 优先取配置中的 api_key（设置窗口写入），
+        # 为空时回退到 api_key_env 指定的环境变量
+        self.api_key: str = config.get("api_key", "")
         self.api_key_env: str = config.get("api_key_env", "")
         self.api_base: str = config.get("api_base") or _DEFAULT_API_BASES.get(self.provider, "")
 
@@ -64,9 +67,13 @@ class LLMClient:
 
     def _chat_openai_compatible(self, messages: List[Dict[str, str]]) -> str:
         """调用 OpenAI / DeepSeek 等 OpenAI 兼容的 Chat Completions 接口。"""
-        api_key = os.environ.get(self.api_key_env, "") if self.api_key_env else ""
+        api_key = self.api_key or (
+            os.environ.get(self.api_key_env, "") if self.api_key_env else ""
+        )
         if not api_key:
-            raise AIServiceError(f"未配置 API Key（环境变量 {self.api_key_env or '<未指定>'} 为空）")
+            raise AIServiceError(
+                f"未配置 API Key（配置项 api_key 与环境变量 {self.api_key_env or '<未指定>'} 均为空）"
+            )
 
         if not self.api_base:
             raise AIServiceError(f"未配置 api_base（provider={self.provider}）")
@@ -90,6 +97,20 @@ class LLMClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            # 提取服务端返回的错误描述（如 Key 无效 / 模型不存在 / 余额不足）：
+            # OpenAI 兼容接口的错误体为 {"error": {"message": "..."}}
+            detail = ""
+            try:
+                raw = exc.read().decode("utf-8", errors="replace").strip()
+                try:
+                    detail = json.loads(raw).get("error", {}).get("message", "") or raw
+                except (json.JSONDecodeError, AttributeError):
+                    detail = raw
+            except Exception:
+                pass
+            detail = detail[:200] or exc.reason
+            raise AIServiceError(f"LLM 请求失败: HTTP {exc.code} {detail}") from exc
         except (urllib.error.URLError, OSError) as exc:
             raise AIServiceError(f"LLM 请求失败: {exc}") from exc
         except json.JSONDecodeError as exc:

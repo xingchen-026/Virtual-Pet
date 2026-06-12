@@ -5,7 +5,7 @@ InteractionManager 负责：
 * 鼠标按下/移动/释放事件的监听
 * 点击检测（鼠标是否落在宠物精灵范围内）
 * 拖拽处理（拖拽开始/移动/结束，宠物跟随鼠标且不产生位置跳动）
-* 功能按键监听（喂食 / 玩耍）
+* 右键点击（弹出/关闭数值与功能面板，喂食/玩耍按钮位于面板中）
 
 本模块只识别用户输入并产出 InteractionEvent，
 不直接修改 Pet 属性、动画或位置，
@@ -78,9 +78,6 @@ class InteractionManager:
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             return self._handle_mouse_up()
 
-        if event.type == pygame.KEYDOWN:
-            return self._handle_key_down(event.key)
-
         return None
 
     def _handle_mouse_down(self, position: Tuple[int, int]) -> Optional[InteractionEvent]:
@@ -127,15 +124,3 @@ class InteractionManager:
             return InteractionEvent(type=InteractionEventType.EXCITED)
 
         return InteractionEvent(type=InteractionEventType.CLICK)
-
-    def _handle_key_down(self, key: int) -> Optional[InteractionEvent]:
-        """功能按键：F 触发喂食，P 触发玩耍。"""
-        key_name = pygame.key.name(key)
-
-        if key_name == settings.FEED_KEY:
-            return InteractionEvent(type=InteractionEventType.FEED)
-
-        if key_name == settings.PLAY_KEY:
-            return InteractionEvent(type=InteractionEventType.PLAY)
-
-        return None

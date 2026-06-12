@@ -1,16 +1,19 @@
-"""宠物数值信息面板模块。
+"""宠物数值信息与功能面板模块。
 
-StatsPanel 提供一个右键点击宠物后弹出的信息面板，
-显示宠物名称、状态、各属性数值、行为与 AI 服务状态等信息，
-再次右键点击宠物（或点击面板外区域）即关闭。
+StatsPanel 提供一个右键点击宠物后弹出的面板：
 
-面板内容由 Game 每帧传入（draw 的 lines 参数），
-本模块只负责定位与渲染，不依赖 Pet / AIService 等业务对象。
+* 数值信息：宠物名称、状态、各属性数值、行为与 AI 服务状态等
+* 功能按钮：喂食 / 玩耍 / 聊天（替代原先的键盘功能按键）
+
+再次右键点击宠物即关闭。面板内容由 Game 每帧传入（draw 的
+lines 参数），按钮点击通过 handle_click() 返回动作标识，
+由 Game 分发为交互事件；本模块只负责定位、渲染与点击命中检测，
+不依赖 Pet / AIService 等业务对象。
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import pygame
 
@@ -20,24 +23,58 @@ PANEL_BG_COLOR = (255, 255, 255)
 BORDER_COLOR = (160, 160, 160)
 TITLE_COLOR = (60, 60, 60)
 TEXT_COLOR = (40, 40, 40)
+BUTTON_BG_COLOR = (235, 242, 250)
+BUTTON_BORDER_COLOR = (150, 170, 200)
+BUTTON_TEXT_COLOR = (40, 60, 90)
 
 TITLE_TEXT = "宠物状态"
 
+# 功能按钮：按行排列的 (显示文字, 动作标识)，动作由 Game 分发
+BUTTON_ROWS = [
+    [("喂食", "feed"), ("玩耍", "play")],
+    [("聊天", "chat"), ("设置", "settings")],
+]
+
+BUTTON_HEIGHT = 28
+BUTTON_GAP = 8
+
 
 class StatsPanel:
-    """右键弹出的宠物数值信息面板。"""
+    """右键弹出的宠物数值信息与功能按钮面板。"""
 
     def __init__(self, font: pygame.font.Font) -> None:
         self.font = font
         self.visible = False
 
+        # 最近一次绘制的面板/按钮区域（窗口坐标），用于点击命中检测
+        self._panel_rect: Optional[pygame.Rect] = None
+        self._button_rects: List[Tuple[pygame.Rect, str]] = []
+
     def toggle(self) -> None:
         """切换面板的显示/隐藏。"""
         self.visible = not self.visible
+        if not self.visible:
+            self._clear_hit_areas()
 
     def hide(self) -> None:
         """关闭面板。"""
         self.visible = False
+        self._clear_hit_areas()
+
+    def contains(self, position: Tuple[int, int]) -> bool:
+        """判断窗口坐标是否落在面板范围内（面板不可见时恒为 False）。"""
+        return (
+            self.visible
+            and self._panel_rect is not None
+            and self._panel_rect.collidepoint(position)
+        )
+
+    def handle_click(self, position: Tuple[int, int]) -> Optional[str]:
+        """处理面板内的左键点击，命中按钮时返回其动作标识。"""
+        for rect, action in self._button_rects:
+            if rect.collidepoint(position):
+                return action
+        return None
 
     def draw(
         self,
@@ -56,9 +93,11 @@ class StatsPanel:
         padding = settings.STATS_PANEL_PADDING
         line_height = self.font.get_linesize()
         width = settings.STATS_PANEL_WIDTH
-        height = (len(lines) + 1) * line_height + 2 * padding
+        buttons_height = len(BUTTON_ROWS) * (BUTTON_HEIGHT + BUTTON_GAP) - BUTTON_GAP
+        height = (len(lines) + 1) * line_height + buttons_height + 3 * padding
 
         x, y = self._panel_position(surface, anchor_rect, width, height)
+        self._panel_rect = pygame.Rect(x, y, width, height)
 
         panel = pygame.Surface((width, height))
         panel.fill(PANEL_BG_COLOR)
@@ -78,7 +117,49 @@ class StatsPanel:
             panel.blit(text_surface, (padding, text_y))
             text_y += line_height
 
+        self._draw_buttons(panel, x, y, padding, text_y + padding)
+
         surface.blit(panel, (x, y))
+
+    def _draw_buttons(
+        self,
+        panel: pygame.Surface,
+        panel_x: int,
+        panel_y: int,
+        padding: int,
+        buttons_y: int,
+    ) -> None:
+        """绘制底部功能按钮（多行排列），并记录各按钮的窗口坐标命中区域。"""
+        width = panel.get_width()
+
+        self._button_rects = []
+        for row_index, row in enumerate(BUTTON_ROWS):
+            count = len(row)
+            button_width = (width - 2 * padding - (count - 1) * BUTTON_GAP) // count
+            row_y = buttons_y + row_index * (BUTTON_HEIGHT + BUTTON_GAP)
+
+            for index, (label, action) in enumerate(row):
+                local_rect = pygame.Rect(
+                    padding + index * (button_width + BUTTON_GAP),
+                    row_y,
+                    button_width,
+                    BUTTON_HEIGHT,
+                )
+                pygame.draw.rect(panel, BUTTON_BG_COLOR, local_rect, border_radius=6)
+                pygame.draw.rect(panel, BUTTON_BORDER_COLOR, local_rect, 1, border_radius=6)
+
+                text_surface = self.font.render(label, True, BUTTON_TEXT_COLOR)
+                panel.blit(
+                    text_surface,
+                    (
+                        local_rect.centerx - text_surface.get_width() // 2,
+                        local_rect.centery - text_surface.get_height() // 2,
+                    ),
+                )
+
+                self._button_rects.append(
+                    (local_rect.move(panel_x, panel_y), action)
+                )
 
     def _panel_position(
         self,
@@ -96,7 +177,12 @@ class StatsPanel:
             x = anchor_rect.left - margin - width
         x = max(0, min(x, screen_rect.right - width))
 
-        y = anchor_rect.top
+        # 垂直方向与宠物中心对齐，超出窗口时收紧
+        y = anchor_rect.centery - height // 2
         y = max(0, min(y, screen_rect.bottom - height))
 
         return x, y
+
+    def _clear_hit_areas(self) -> None:
+        self._panel_rect = None
+        self._button_rects = []

@@ -23,12 +23,13 @@
 settings.TRANSPARENT_COLOR_KEY 后由 DesktopManager 设为透明色键，
 使窗口看起来只显示宠物本体，悬浮于桌面之上。
 
-拖拽宠物时区分两种模式：
+窗口跟随模式（支持桌面窗口能力时，Windows）：
 
-* 支持桌面窗口能力（Windows）：DRAG_MOVE 转换为"窗口移动拖拽"——
-  整个窗口跟随鼠标移动，宠物在窗口内的位置保持不变。
-* 不支持时（如非 Windows 平台）：退化为已有的"宠物在窗口内移动"
-  拖拽方式，保证基础可运行。
+* 宠物固定渲染在窗口中心，Pet.position 表示宠物在屏幕坐标系
+  下的位置；自主移动/拖拽统一通过移动整个窗口实现，
+  宠物漫游范围为整个屏幕。
+* 不支持时（如非 Windows 平台）：退化为"宠物在窗口内移动"
+  模式，保证基础可运行。
 
 系统托盘（utils.tray.TrayIcon）运行在独立线程，菜单回调仅将动作
 放入队列，由主循环在 _process_tray_actions() 中统一处理，
@@ -62,13 +63,13 @@ from core.autonomous import AutonomousManager
 from core.behavior import PetBehavior
 from core.desktop import DesktopManager
 from core.event import InteractionEvent, InteractionEventType
-from core.feedback import FeedbackOverlay
 from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
 from core.skin import SkinManager
 from core.sprite import PetSprite
 from ui.chat_window import ChatWindow
+from ui.settings_window import SettingsWindow
 from ui.stats_panel import StatsPanel
 from utils.behavior_logger import BehaviorLogger
 from utils.helper import load_json, save_json
@@ -82,8 +83,8 @@ INTERACTION_LOG_MESSAGES = {
     InteractionEventType.PLAY: "User played with pet",
 }
 
-# 交互提示文字起始绘制位置
-FEEDBACK_TEXT_POS = (10, 220)
+# 设置窗口尺寸（居中显示）
+SETTINGS_WINDOW_SIZE = (380, 310)
 
 
 class Game:
@@ -133,19 +134,48 @@ class Game:
             self.pet, self.behavior, behavior_config, self.behavior_logger
         )
 
+        # 窗口跟随模式：宠物固定渲染在窗口中心，Pet.position 为屏幕坐标，
+        # 移动通过移动整个窗口实现，漫游范围扩展为整个屏幕
+        self._window_center = (settings.WINDOW_WIDTH // 2, settings.WINDOW_HEIGHT // 2)
+        self._window_pos = self.desktop_manager.get_position()
+        if self.desktop_manager.supported:
+            self.pet_sprite.render_center = self._window_center
+            self.pet.set_position(
+                self._window_pos[0] + self._window_center[0],
+                self._window_pos[1] + self._window_center[1],
+            )
+            self.autonomous_manager.movement.set_bounds(
+                *self.desktop_manager.get_screen_size()
+            )
+
         # 界面字体：必须使用含中文字形的系统字体（settings.UI_FONT_NAMES），
         # 否则聊天窗口/面板中的中文会渲染为方块乱码
         self.ui_font = pygame.font.SysFont(settings.UI_FONT_NAMES, settings.UI_FONT_SIZE)
-        self.feedback_overlay = FeedbackOverlay(self.ui_font)
 
         # 宠物数值信息面板：右键点击宠物弹出/关闭
         self.stats_panel = StatsPanel(self.ui_font)
 
+        # 交互引起的属性变化（属性名 -> [变化量, 剩余显示时间]），
+        # 在数值面板对应行后以 +xx/-xx 形式短暂显示
+        self._attr_deltas: dict = {}
+
+        # 用户偏好（宠物大小等）与设置窗口
+        user_config = load_json(settings.USER_CONFIG_FILE) or {}
+        self.pet_sprite.scale = user_config.get("pet_scale", settings.PET_SCALE_DEFAULT)
+        settings_rect = pygame.Rect(
+            (settings.WINDOW_WIDTH - SETTINGS_WINDOW_SIZE[0]) // 2,
+            (settings.WINDOW_HEIGHT - SETTINGS_WINDOW_SIZE[1]) // 2,
+            *SETTINGS_WINDOW_SIZE,
+        )
+        self.settings_window = SettingsWindow(self.ui_font, settings_rect)
+        self._ai_test_results: "queue.Queue[tuple]" = queue.Queue()
+
         # AI 服务：Pet -> AIService -> LLM，人格/记忆数据持久化到 data/ 下的 JSON 文件
-        ai_config = load_json(settings.AI_CONFIG_FILE) or {}
+        # ai_config 保留引用，供设置窗口读取/更新后写回
+        self.ai_config = load_json(settings.AI_CONFIG_FILE) or {}
         self.personality = PersonalityManager()
         self.memory = MemoryManager()
-        self.ai_service = AIService(ai_config, self.personality, self.memory, self.behavior)
+        self.ai_service = AIService(self.ai_config, self.personality, self.memory, self.behavior)
 
         # AI 对话窗口：UI 与 AIService 解耦，AI 回复在后台线程获取，经队列回传主循环
         chat_rect = pygame.Rect(
@@ -214,9 +244,20 @@ class Game:
                 self.running = False
                 continue
 
+            # 设置窗口为模态：打开期间所有输入事件均由其处理
+            if self.settings_window.visible:
+                if event.type in (
+                    pygame.KEYDOWN, pygame.TEXTINPUT, pygame.MOUSEBUTTONDOWN,
+                ):
+                    result = self.settings_window.handle_event(event)
+                    if result is not None:
+                        self._handle_settings_result(result)
+                continue
+
             if event.type == pygame.KEYDOWN and not self.chat_window.visible:
                 if pygame.key.name(event.key) == settings.CHAT_TOGGLE_KEY:
                     self.chat_window.toggle()
+                    self.desktop_manager.focus()
                     continue
 
             if self.chat_window.visible and event.type in (
@@ -225,6 +266,16 @@ class Game:
                 message = self.chat_window.handle_event(event)
                 if message:
                     self._send_chat_message(message)
+                continue
+
+            # 数值面板内的左键点击（功能按钮）优先于宠物交互处理，
+            # 避免面板覆盖宠物区域时点按钮被误判为点击/拖拽宠物
+            if (
+                event.type == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
+                and self.stats_panel.contains(event.pos)
+            ):
+                self._handle_panel_action(self.stats_panel.handle_click(event.pos))
                 continue
 
             interaction_event = self.interaction_manager.handle_event(event)
@@ -256,12 +307,15 @@ class Game:
             self._drag_anchor = None
             return
 
+        # 记录行为前后的属性变化，在数值面板对应行后以 +xx/-xx 显示
+        before = (self.pet.hunger, self.pet.mood, self.pet.energy)
+
         result = self.behavior_manager.handle(interaction_event, self.pet)
         if result is None:
             return
 
         self.behavior.trigger_temporary_animation(result.animation, result.duration)
-        self.feedback_overlay.show(result.message)
+        self._record_attr_deltas(before)
 
         log_message = INTERACTION_LOG_MESSAGES.get(interaction_event.type)
         if log_message is not None:
@@ -286,12 +340,102 @@ class Game:
         )
 
     def _update_window_drag(self):
-        """根据鼠标在屏幕坐标系下的位移，移动整个桌宠窗口（窗口移动拖拽）。"""
+        """根据鼠标在屏幕坐标系下的位移，移动整个桌宠窗口（窗口移动拖拽）。
+
+        同步更新 Pet.position（屏幕坐标），保持"窗口中心 = 宠物位置"
+        的不变式，避免拖拽结束后窗口被 _sync_window_to_pet() 拉回原位。
+        """
         start_cursor, start_window = self._drag_anchor
         cursor_x, cursor_y = self.desktop_manager.get_cursor_position()
-        dx = cursor_x - start_cursor[0]
-        dy = cursor_y - start_cursor[1]
-        self.desktop_manager.set_position(start_window[0] + dx, start_window[1] + dy)
+        new_x = start_window[0] + cursor_x - start_cursor[0]
+        new_y = start_window[1] + cursor_y - start_cursor[1]
+
+        self.desktop_manager.set_position(new_x, new_y)
+        self._window_pos = (new_x, new_y)
+        self.pet.set_position(
+            new_x + self._window_center[0], new_y + self._window_center[1]
+        )
+
+    def _sync_window_to_pet(self):
+        """窗口跟随宠物：使窗口中心始终对准宠物的屏幕坐标。"""
+        if not self.desktop_manager.supported:
+            return
+
+        target = (
+            self.pet.position[0] - self._window_center[0],
+            self.pet.position[1] - self._window_center[1],
+        )
+        if target != self._window_pos:
+            self.desktop_manager.set_position(*target)
+            self._window_pos = target
+
+    def _handle_panel_action(self, action) -> None:
+        """分发数值面板功能按钮的动作（喂食 / 玩耍 / 聊天 / 设置）。"""
+        if action == "feed":
+            self._dispatch_interaction(InteractionEvent(type=InteractionEventType.FEED))
+        elif action == "play":
+            self._dispatch_interaction(InteractionEvent(type=InteractionEventType.PLAY))
+        elif action == "chat":
+            self.chat_window.toggle()
+            self.stats_panel.hide()
+            if self.chat_window.visible:
+                self.desktop_manager.focus()
+        elif action == "settings":
+            self.settings_window.open(self.pet_sprite.scale, self.ai_config)
+            self.stats_panel.hide()
+            self.desktop_manager.focus()
+
+    def _handle_settings_result(self, result: dict) -> None:
+        """应用设置窗口的保存/测试结果。"""
+        if result.get("action") == "test":
+            self._test_ai_config(result["ai_config"])
+            return
+
+        if result.get("action") == "save":
+            self.pet_sprite.scale = result["pet_scale"]
+            save_json(settings.USER_CONFIG_FILE, {"pet_scale": result["pet_scale"]})
+
+            self.ai_config.update(result["ai_config"])
+            save_json(settings.AI_CONFIG_FILE, self.ai_config)
+            self.ai_service.apply_config(self.ai_config)
+
+        # 设置窗口已关闭：聊天窗口未打开时停用文本输入
+        if not self.chat_window.visible:
+            pygame.key.stop_text_input()
+
+    def _test_ai_config(self, partial_config: dict) -> None:
+        """在后台线程中用设置窗口的当前编辑值测试 LLM 连接。"""
+        config = {**self.ai_config, **partial_config}
+        self.settings_window.set_status("正在测试连接...", None)
+
+        def worker() -> None:
+            self._ai_test_results.put(AIService.test_connection(config))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _process_ai_test_results(self) -> None:
+        """将后台线程的连接测试结果写回设置窗口状态行。"""
+        while not self._ai_test_results.empty():
+            ok, message = self._ai_test_results.get_nowait()
+            self.settings_window.set_status(message, ok)
+
+    def _record_attr_deltas(self, before: tuple) -> None:
+        """对比交互前后的属性值，记录非零变化量供数值面板显示。"""
+        for name, old_value, new_value in (
+            ("hunger", before[0], self.pet.hunger),
+            ("mood", before[1], self.pet.mood),
+            ("energy", before[2], self.pet.energy),
+        ):
+            delta = new_value - old_value
+            if delta:
+                self._attr_deltas[name] = [delta, settings.ATTR_DELTA_DURATION]
+
+    def _attr_delta_suffix(self, name: str) -> str:
+        """生成属性行的变化量后缀（如 " +20"），无变化时返回空字符串。"""
+        entry = self._attr_deltas.get(name)
+        if entry is None:
+            return ""
+        return f"  {entry[0]:+.0f}"
 
     def _send_chat_message(self, message: str) -> None:
         """提交用户输入的聊天消息：显示在对话窗口，并在后台线程调用 AIService。
@@ -319,13 +463,32 @@ class Game:
         """逐帧更新逻辑：处理托盘动作、AI 回复、宠物行为/自主行为决策/动画与交互提示。"""
         self._process_tray_actions()
         self._process_ai_replies()
+        self._process_ai_test_results()
 
         self.behavior.update(dt)
-        self.autonomous_manager.update(dt, self.interaction_manager.dragging)
+        # 拖拽中或聊天/设置窗口打开时暂停自主行为：
+        # 窗口跟随模式下漫游会移动整个窗口，输入期间窗口必须保持静止
+        interaction_active = (
+            self.interaction_manager.dragging
+            or self.chat_window.visible
+            or self.settings_window.visible
+        )
+        self.autonomous_manager.update(dt, interaction_active)
+        self._sync_window_to_pet()
         self.pet_sprite.update(dt)
-        self.feedback_overlay.update(dt)
+        self._update_attr_deltas(dt)
 
         self._refresh_topmost(dt)
+
+    def _update_attr_deltas(self, dt: float) -> None:
+        """推进属性变化提示的剩余显示时间，移除已过期的条目。"""
+        expired = []
+        for name, entry in self._attr_deltas.items():
+            entry[1] -= dt
+            if entry[1] <= 0:
+                expired.append(name)
+        for name in expired:
+            del self._attr_deltas[name]
 
     def _process_tray_actions(self):
         """处理系统托盘菜单产生的动作（显示/隐藏/保存/退出）。"""
@@ -361,26 +524,28 @@ class Game:
         self.screen.fill(background_color)
         self.pet_sprite.draw(self.screen)
         self.stats_panel.draw(self.screen, self.pet_sprite.rect, self._stats_lines())
-        self.feedback_overlay.draw(self.screen, FEEDBACK_TEXT_POS)
         self.chat_window.draw(self.screen)
+        self.settings_window.draw(self.screen)
         pygame.display.flip()
 
     def _stats_lines(self):
-        """生成数值信息面板的内容（右键点击宠物弹出）。"""
+        """生成数值信息面板的内容（右键点击宠物弹出）。
+
+        喂食/玩耍等交互引起的属性变化以 +xx/-xx 后缀短暂显示在
+        对应属性行后（见 _record_attr_deltas / _attr_delta_suffix）。
+        """
         return [
             f"名称: {self.pet.name}  年龄: {self.pet.age}",
             f"状态: {self.pet.current_state.name}",
-            f"饥饿: {self.pet.hunger:.1f}",
-            f"心情: {self.pet.mood:.1f}",
-            f"体力: {self.pet.energy:.1f}",
+            f"饥饿: {self.pet.hunger:.1f}{self._attr_delta_suffix('hunger')}",
+            f"心情: {self.pet.mood:.1f}{self._attr_delta_suffix('mood')}",
+            f"体力: {self.pet.energy:.1f}{self._attr_delta_suffix('energy')}",
             f"最近动作: {self.pet.last_action or '无'}",
             f"互动次数: {self.pet.interaction_count}",
             f"行为: {self.autonomous_manager.current_behavior.name}",
             f"情绪: {self.autonomous_manager.emotion.name}",
             f"时间: {self.autonomous_manager.schedule.time_of_day()}"
             f" (第 {self.autonomous_manager.schedule.day_count} 天)",
-            f"AI: {'在线' if self.ai_service.available else '离线'}"
-            f"  [{settings.CHAT_TOGGLE_KEY.upper()}] 聊天",
         ]
 
     def _quit(self):

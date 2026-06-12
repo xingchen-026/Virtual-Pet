@@ -60,6 +60,28 @@ class AIService:
         # AI 服务当前是否可用（最近一次 LLM 调用是否成功）
         self.available = True
 
+    def apply_config(self, ai_config: dict) -> None:
+        """应用新的 LLM 配置（设置窗口保存后调用），并重置可用状态。"""
+        self.llm_client = LLMClient(ai_config)
+        self.available = True
+
+    @staticmethod
+    def test_connection(ai_config: dict) -> tuple:
+        """用给定配置发送一次测试请求，返回 (是否成功, 结果描述)。
+
+        供设置窗口的"测试"按钮验证 API Key / 模型名是否有效，
+        会产生一次真实的 LLM 调用，应在后台线程中执行。
+        """
+        client = LLMClient(ai_config)
+        try:
+            reply = client.chat([{"role": "user", "content": "你好"}])
+            return True, f"连接成功：{reply[:24]}"
+        except AIServiceError as exc:
+            # 完整错误写入 logs/error.log，状态行显示精简版本
+            log_exception(exc)
+            brief = str(exc).replace("LLM 请求失败: ", "")
+            return False, f"连接失败：{brief}"
+
     def chat(self, pet, user_message: str) -> str:
         """处理一轮用户对话：获取回复、应用情绪/行为联动、记录记忆。
 

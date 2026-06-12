@@ -42,6 +42,10 @@ class Pet:
         self.energy = self._clamp(energy)
         self.position = position if position is not None else settings.DEFAULT_PET_POSITION
 
+        # 当前朝向：素材帧默认朝右，向左移动时由 Sprite 镜像翻转渲染。
+        # 运行时状态，不持久化。
+        self.facing_left = False
+
         # 当前行为状态（由 StateMachine 计算，core.behavior 负责同步）
         self.current_state = PetState.IDLE
 
