@@ -29,3 +29,23 @@ DEFAULT_PET_HUNGER = 100
 DEFAULT_PET_MOOD = 100
 DEFAULT_PET_ENERGY = 100
 DEFAULT_PET_POSITION = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
+
+# ----- 动画配置 -----
+# 动画状态名称 -> assets/animations 下对应的资源目录名
+ANIMATION_FOLDERS = {
+    "idle": "idle",
+    "happy": "happy",
+    "hungry": "hungry",
+    "tired": "tired",
+}
+
+# 动画状态名称 -> 单帧播放时长（秒），数值越小播放越快
+ANIMATION_FRAME_DURATIONS = {
+    "idle": 0.20,
+    "happy": 0.10,
+    "hungry": 0.25,
+    "tired": 0.35,
+}
+
+# 宠物默认动画状态
+DEFAULT_ANIMATION_STATE = "idle"

@@ -4,15 +4,18 @@
 为后续阶段的动画状态、行为状态机预留扩展字段。
 """
 
+from typing import Union
+
 from config import settings
+from core.animation import AnimationState
 
 
 class Pet:
     """虚拟宠物核心类。
 
-    当前阶段仅包含基础属性（外观、状态数值、位置）的存取接口。
-    animation_state / behavior_state 字段在本阶段不会被使用，
-    仅作为后续动画系统、行为状态机的预留扩展点。
+    包含基础属性（外观、状态数值、位置）以及当前动画状态的存取接口。
+    behavior_state 字段在本阶段不会被使用，
+    仅作为后续行为状态机的预留扩展点。
     """
 
     def __init__(
@@ -31,8 +34,10 @@ class Pet:
         self.energy = self._clamp(energy)
         self.position = position if position is not None else settings.DEFAULT_PET_POSITION
 
-        # 预留扩展字段：后续阶段将用于动画系统与行为状态机
-        self.animation_state = None
+        # 当前动画状态（字符串值，对应 AnimationState 枚举）
+        self.current_animation = settings.DEFAULT_ANIMATION_STATE
+
+        # 预留扩展字段：后续阶段将用于行为状态机
         self.behavior_state = None
 
     # ----- 属性修改接口 -----
@@ -53,6 +58,19 @@ class Pet:
 
     def set_energy(self, value):
         self.energy = self._clamp(value)
+
+    def change_animation(self, state: Union[AnimationState, str]) -> None:
+        """切换宠物当前动画状态。
+
+        state 可以是 AnimationState 枚举值，也可以是其字符串值（如 "happy"）。
+        传入无效状态名称时会抛出 ValueError。
+        """
+        if isinstance(state, AnimationState):
+            state = state.value
+        else:
+            state = AnimationState(state).value
+
+        self.current_animation = state
 
     @staticmethod
     def _clamp(value):
