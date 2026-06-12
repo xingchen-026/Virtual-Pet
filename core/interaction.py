@@ -69,6 +69,9 @@ class InteractionManager:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             return self._handle_mouse_down(event.pos)
 
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+            return self._handle_right_click(event.pos)
+
         if event.type == pygame.MOUSEMOTION and self.dragging:
             return self._handle_mouse_motion(event.pos)
 
@@ -92,6 +95,13 @@ class InteractionManager:
         self._drag_offset = (rect.centerx - position[0], rect.centery - position[1])
 
         return InteractionEvent(type=InteractionEventType.DRAG_START, position=position)
+
+    def _handle_right_click(self, position: Tuple[int, int]) -> Optional[InteractionEvent]:
+        """右键点击宠物：弹出/关闭数值信息面板，不影响属性与拖拽。"""
+        if self.dragging or not self.pet_sprite.rect.collidepoint(position):
+            return None
+
+        return InteractionEvent(type=InteractionEventType.STATS_TOGGLE, position=position)
 
     def _handle_mouse_motion(self, position: Tuple[int, int]) -> InteractionEvent:
         """拖拽过程中：根据鼠标位置与抓取偏移量计算宠物新的中心坐标。

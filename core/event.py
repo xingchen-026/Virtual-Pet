@@ -23,6 +23,7 @@ class InteractionEventType(enum.Enum):
     DRAG_END = "drag_end"        # 拖拽结束
     FEED = "feed"               # 喂食
     PLAY = "play"               # 玩耍
+    STATS_TOGGLE = "stats_toggle"  # 右键点击宠物，弹出/关闭数值信息面板
 
 
 @dataclass

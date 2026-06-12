@@ -44,6 +44,19 @@ TRANSPARENT_COLOR_KEY = (255, 0, 255)
 # 维持窗口置顶状态的检查间隔（秒）。避免每帧调用系统 API 影响性能。
 TOPMOST_REFRESH_INTERVAL = 2.0
 
+# ----- UI 字体配置 -----
+# 界面文字字体候选列表（按顺序匹配系统已安装字体）。
+# 必须包含中文字体，否则中文会渲染为方块乱码；
+# 文件读写已统一 UTF-8，界面乱码均由字体缺少中文字形导致。
+UI_FONT_NAMES = ["microsoftyahei", "simhei", "kaiti", "fangsong"]
+UI_FONT_SIZE = 16
+
+# ----- 宠物数值面板配置 -----
+# 右键点击宠物弹出/关闭数值信息面板
+STATS_PANEL_WIDTH = 220
+STATS_PANEL_PADDING = 10
+STATS_PANEL_MARGIN = 8
+
 # ----- 宠物属性数值范围 -----
 ATTRIBUTE_MIN = 0
 ATTRIBUTE_MAX = 100

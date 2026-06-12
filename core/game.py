@@ -68,6 +68,7 @@ from core.pet import Pet
 from core.resource import ResourceManager
 from core.sprite import PetSprite
 from ui.chat_window import ChatWindow
+from ui.stats_panel import StatsPanel
 from utils.behavior_logger import BehaviorLogger
 from utils.helper import load_json, save_json
 from utils.tray import TrayIcon
@@ -79,11 +80,6 @@ INTERACTION_LOG_MESSAGES = {
     InteractionEventType.FEED: "User fed pet",
     InteractionEventType.PLAY: "User played with pet",
 }
-
-# 调试信息文字颜色与起始绘制位置
-DEBUG_TEXT_COLOR = (30, 30, 30)
-DEBUG_TEXT_POS = (10, 10)
-DEBUG_LINE_HEIGHT = 20
 
 # 交互提示文字起始绘制位置
 FEEDBACK_TEXT_POS = (10, 220)
@@ -132,8 +128,13 @@ class Game:
             self.pet, self.behavior, behavior_config, self.behavior_logger
         )
 
-        self.debug_font = pygame.font.SysFont(None, 20)
-        self.feedback_overlay = FeedbackOverlay(self.debug_font)
+        # 界面字体：必须使用含中文字形的系统字体（settings.UI_FONT_NAMES），
+        # 否则聊天窗口/面板中的中文会渲染为方块乱码
+        self.ui_font = pygame.font.SysFont(settings.UI_FONT_NAMES, settings.UI_FONT_SIZE)
+        self.feedback_overlay = FeedbackOverlay(self.ui_font)
+
+        # 宠物数值信息面板：右键点击宠物弹出/关闭
+        self.stats_panel = StatsPanel(self.ui_font)
 
         # AI 服务：Pet -> AIService -> LLM，人格/记忆数据持久化到 data/ 下的 JSON 文件
         ai_config = load_json(settings.AI_CONFIG_FILE) or {}
@@ -148,7 +149,7 @@ class Game:
             settings.WINDOW_WIDTH - 2 * settings.CHAT_WINDOW_MARGIN,
             settings.CHAT_WINDOW_HEIGHT,
         )
-        self.chat_window = ChatWindow(self.debug_font, chat_rect, pet_name=self.personality.name)
+        self.chat_window = ChatWindow(self.ui_font, chat_rect, pet_name=self.personality.name)
         self._ai_replies: "queue.Queue[str]" = queue.Queue()
 
         # 系统托盘：菜单回调在后台线程执行，仅将动作放入队列，主循环统一处理
@@ -224,6 +225,10 @@ class Game:
         拖拽开始/移动/结束属于位置更新，不经过 BehaviorManager；
         其余事件统一走 BehaviorManager -> Pet Attribute -> 临时动画。
         """
+        if interaction_event.type == InteractionEventType.STATS_TOGGLE:
+            self.stats_panel.toggle()
+            return
+
         if interaction_event.type == InteractionEventType.DRAG_START:
             self._begin_window_drag()
             return
@@ -335,7 +340,7 @@ class Game:
             self.desktop_manager.keep_on_top()
 
     def _render(self):
-        """渲染当前帧：填充背景（透明色键或白色）、绘制宠物精灵、调试信息与交互提示。"""
+        """渲染当前帧：填充背景（透明色键或白色）、绘制宠物精灵、数值面板与交互提示。"""
         if self.desktop_manager.supported and self.desktop_config.get("transparent", False):
             background_color = settings.TRANSPARENT_COLOR_KEY
         else:
@@ -343,36 +348,28 @@ class Game:
 
         self.screen.fill(background_color)
         self.pet_sprite.draw(self.screen)
-        self._render_debug_info()
+        self.stats_panel.draw(self.screen, self.pet_sprite.rect, self._stats_lines())
         self.feedback_overlay.draw(self.screen, FEEDBACK_TEXT_POS)
         self.chat_window.draw(self.screen)
         pygame.display.flip()
 
-    def _render_debug_info(self):
-        """在窗口左上角绘制宠物名称、状态、各属性数值与桌面窗口状态，便于开发调试。"""
-        lines = [
-            f"Name: {self.pet.name}  Age: {self.pet.age}",
-            f"State: {self.pet.current_state.name}",
-            f"Hunger: {self.pet.hunger:.1f}",
-            f"Mood: {self.pet.mood:.1f}",
-            f"Energy: {self.pet.energy:.1f}",
-            f"Last action: {self.pet.last_action}",
-            f"Interactions: {self.pet.interaction_count}",
-            f"Behavior: {self.autonomous_manager.current_behavior.name}",
-            f"Emotion: {self.autonomous_manager.emotion.name}",
-            f"Time: {self.autonomous_manager.schedule.time_of_day()}"
-            f" (day {self.autonomous_manager.schedule.day_count})",
-            f"Desktop: {'on' if self.desktop_manager.supported else 'off'}"
-            f" ({'visible' if self.desktop_manager.visible else 'hidden'})",
-            f"AI: {'online' if self.ai_service.available else 'offline'}"
+    def _stats_lines(self):
+        """生成数值信息面板的内容（右键点击宠物弹出）。"""
+        return [
+            f"名称: {self.pet.name}  年龄: {self.pet.age}",
+            f"状态: {self.pet.current_state.name}",
+            f"饥饿: {self.pet.hunger:.1f}",
+            f"心情: {self.pet.mood:.1f}",
+            f"体力: {self.pet.energy:.1f}",
+            f"最近动作: {self.pet.last_action or '无'}",
+            f"互动次数: {self.pet.interaction_count}",
+            f"行为: {self.autonomous_manager.current_behavior.name}",
+            f"情绪: {self.autonomous_manager.emotion.name}",
+            f"时间: {self.autonomous_manager.schedule.time_of_day()}"
+            f" (第 {self.autonomous_manager.schedule.day_count} 天)",
+            f"AI: {'在线' if self.ai_service.available else '离线'}"
             f"  [{settings.CHAT_TOGGLE_KEY.upper()}] 聊天",
         ]
-
-        x, y = DEBUG_TEXT_POS
-        for line in lines:
-            text_surface = self.debug_font.render(line, True, DEBUG_TEXT_COLOR)
-            self.screen.blit(text_surface, (x, y))
-            y += DEBUG_LINE_HEIGHT
 
     def _quit(self):
         """停止系统托盘、保存宠物数据并安全退出 Pygame 与程序。"""

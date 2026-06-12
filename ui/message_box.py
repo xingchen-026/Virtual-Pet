@@ -17,7 +17,6 @@ PET_BUBBLE_COLOR = (255, 230, 240)
 TEXT_COLOR = (40, 40, 40)
 
 PADDING = 8
-LINE_HEIGHT = 18
 
 
 def wrap_text(font: pygame.font.Font, text: str, max_width: int) -> List[str]:
@@ -53,11 +52,13 @@ class MessageBox:
         self.sender = sender
         self.max_width = max_width
         self.lines = wrap_text(font, text, max_width - 2 * PADDING)
+        # 行高随字体变化（中文字体行高大于默认英文字体），避免行间重叠
+        self.line_height = font.get_linesize()
 
     @property
     def height(self) -> int:
         """气泡渲染所占的总高度（像素）。"""
-        return len(self.lines) * LINE_HEIGHT + 2 * PADDING
+        return len(self.lines) * self.line_height + 2 * PADDING
 
     def draw(self, surface: pygame.Surface, x: int, y: int) -> None:
         """在 (x, y) 处绘制气泡（左上角坐标）。"""
@@ -70,4 +71,4 @@ class MessageBox:
 
         for index, line in enumerate(self.lines):
             text_surface = self.font.render(line, True, TEXT_COLOR)
-            surface.blit(text_surface, (x + PADDING, y + PADDING + index * LINE_HEIGHT))
+            surface.blit(text_surface, (x + PADDING, y + PADDING + index * self.line_height))
