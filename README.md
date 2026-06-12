@@ -88,8 +88,11 @@ VirtualPet/
 1. 安装依赖：
 
    ```
-   pip install pygame
+   pip install -r requirements.txt
    ```
+
+   运行时依赖 pygame / pywin32 / pystray / Pillow；
+   皮肤导入工具另需 numpy / scipy。
 
 2. （可选）配置 AI 对话功能：
 

@@ -18,6 +18,7 @@ MemoryManager 负责维护两类记忆，均持久化到 data/memory.json：
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -26,6 +27,9 @@ from utils.helper import load_json, save_json
 
 # 短期记忆最多保留的对话轮数
 SHORT_TERM_LIMIT = 10
+
+# 长期记忆最多保留的事件条数（Prompt 只取最近几条，超限丢弃最旧的）
+LONG_TERM_LIMIT = 100
 
 # 拼接进 Prompt 时取最近的对话轮数 / 长期事件条数
 _PROMPT_DIALOGUE_LIMIT = 5
@@ -38,25 +42,33 @@ class MemoryManager:
     def __init__(self, file_path: Optional[str] = None) -> None:
         self._file_path = file_path or settings.MEMORY_FILE
 
+        # 对话记录在聊天工作线程写入，交互事件在主循环写入，
+        # 用锁保护数据修改与文件写入，避免并发写坏 memory.json
+        self._lock = threading.Lock()
+
         data = load_json(self._file_path) or {}
         self.short_term: List[Dict[str, str]] = list(data.get("short_term", []))
         self.long_term: List[Dict[str, str]] = list(data.get("long_term", []))
 
     def add_dialogue(self, user_message: str, pet_reply: str) -> None:
         """记录一轮对话，超过 SHORT_TERM_LIMIT 时丢弃最旧的记录。"""
-        self.short_term.append({"user": user_message, "pet": pet_reply})
-        if len(self.short_term) > SHORT_TERM_LIMIT:
-            self.short_term = self.short_term[-SHORT_TERM_LIMIT:]
-        self.save()
+        with self._lock:
+            self.short_term.append({"user": user_message, "pet": pet_reply})
+            if len(self.short_term) > SHORT_TERM_LIMIT:
+                self.short_term = self.short_term[-SHORT_TERM_LIMIT:]
+            self._save_locked()
 
     def add_event(self, event: str, emotion: str = "") -> None:
-        """记录一条长期重要事件（带日期与情绪标签）。"""
-        self.long_term.append({
-            "event": event,
-            "time": datetime.now().strftime("%Y-%m-%d"),
-            "emotion": emotion,
-        })
-        self.save()
+        """记录一条长期重要事件（带日期与情绪标签），超限丢弃最旧的。"""
+        with self._lock:
+            self.long_term.append({
+                "event": event,
+                "time": datetime.now().strftime("%Y-%m-%d"),
+                "emotion": emotion,
+            })
+            if len(self.long_term) > LONG_TERM_LIMIT:
+                self.long_term = self.long_term[-LONG_TERM_LIMIT:]
+            self._save_locked()
 
     def recent_dialogues(self, limit: int = SHORT_TERM_LIMIT) -> List[Dict[str, str]]:
         """返回最近 limit 轮对话（按时间正序）。"""
@@ -82,5 +94,10 @@ class MemoryManager:
         return "\n".join(lines)
 
     def save(self) -> None:
-        """将当前记忆数据写回 data/memory.json。"""
+        """将当前记忆数据写回 data/memory.json（线程安全）。"""
+        with self._lock:
+            self._save_locked()
+
+    def _save_locked(self) -> None:
+        """实际执行文件写入，调用方必须已持有 self._lock。"""
         save_json(self._file_path, {"short_term": self.short_term, "long_term": self.long_term})

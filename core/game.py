@@ -72,6 +72,7 @@ from ui.chat_window import ChatWindow
 from ui.settings_window import SettingsWindow
 from ui.stats_panel import StatsPanel
 from utils.behavior_logger import BehaviorLogger
+from utils.exception import AIServiceError, log_exception
 from utils.helper import load_json, save_json
 from utils.tray import TrayIcon
 
@@ -170,6 +171,9 @@ class Game:
         self.settings_window = SettingsWindow(self.ui_font, settings_rect)
         self._ai_test_results: "queue.Queue[tuple]" = queue.Queue()
 
+        # 宠物数据自动存档计时器（settings.AUTOSAVE_INTERVAL 秒一次）
+        self._autosave_timer = 0.0
+
         # AI 服务：Pet -> AIService -> LLM，人格/记忆数据持久化到 data/ 下的 JSON 文件
         # ai_config 保留引用，供设置窗口读取/更新后写回
         self.ai_config = load_json(settings.AI_CONFIG_FILE) or {}
@@ -218,19 +222,32 @@ class Game:
     def run(self):
         """启动主循环，直到用户关闭窗口或主动退出。
 
-        窗口隐藏到系统托盘期间使用 settings.BACKGROUND_FPS 降低帧率，
-        减少后台运行时的 CPU 占用。
+        帧率分三档：窗口隐藏时 BACKGROUND_FPS；活跃（移动/拖拽/
+        UI 窗口打开）时 FPS；其余空闲时 IDLE_FPS，降低常驻开销。
         """
         self.tray_icon.run_detached()
 
         while self.running:
-            fps = settings.FPS if self.desktop_manager.visible else settings.BACKGROUND_FPS
-            dt = self.clock.tick(fps) / 1000.0
+            dt = self.clock.tick(self._target_fps()) / 1000.0
             self._handle_events()
             self._update(dt)
             self._render()
 
         self._quit()
+
+    def _target_fps(self) -> int:
+        """根据当前状态选择主循环帧率档位。"""
+        if not self.desktop_manager.visible:
+            return settings.BACKGROUND_FPS
+
+        active = (
+            self.interaction_manager.dragging
+            or self.chat_window.visible
+            or self.settings_window.visible
+            or self.stats_panel.visible
+            or self.autonomous_manager.movement.has_target()
+        )
+        return settings.FPS if active else settings.IDLE_FPS
 
     def _handle_events(self):
         """处理窗口事件：关闭窗口，AI 对话窗口输入，以及鼠标/键盘交互事件。
@@ -447,7 +464,13 @@ class Game:
         self.chat_window.set_pending(True)
 
         def worker() -> None:
-            reply = self.ai_service.chat(self.pet, message)
+            # 兜底捕获所有异常：工作线程若意外死亡，回复永远不会入队，
+            # 聊天窗口将永久停留在"正在输入"状态（pending 无法复位）
+            try:
+                reply = self.ai_service.chat(self.pet, message)
+            except Exception as exc:
+                log_exception(AIServiceError(f"聊天处理出现意外异常: {exc}"))
+                reply = "（呜……我刚才走神了，再和我说一遍好吗？）"
             self._ai_replies.put(reply)
 
         threading.Thread(target=worker, daemon=True).start()
@@ -479,6 +502,14 @@ class Game:
         self._update_attr_deltas(dt)
 
         self._refresh_topmost(dt)
+        self._autosave(dt)
+
+    def _autosave(self, dt: float) -> None:
+        """定期自动保存宠物数据，避免进程异常退出丢失进度。"""
+        self._autosave_timer += dt
+        if self._autosave_timer >= settings.AUTOSAVE_INTERVAL:
+            self._autosave_timer = 0.0
+            save_json(settings.PET_DATA_FILE, self.pet.to_dict())
 
     def _update_attr_deltas(self, dt: float) -> None:
         """推进属性变化提示的剩余显示时间，移除已过期的条目。"""
