@@ -5,6 +5,7 @@
 * 资源不存在 / 动画加载失败 -> ResourceLoadError / AnimationLoadError
 * 存档损坏 -> SaveDataError
 * 窗口初始化失败 -> DesktopWindowError
+* AI 服务调用失败 -> AIServiceError
 
 各模块在捕获到这些异常时调用 log_exception() 记录到
 logs/error.log，并使用兜底数据继续运行，避免程序直接崩溃。
@@ -38,6 +39,10 @@ class SaveDataError(AppError):
 
 class DesktopWindowError(AppError):
     """桌面窗口相关操作失败。"""
+
+
+class AIServiceError(AppError):
+    """AI 服务调用失败（网络异常 / API 失败 / 返回格式错误等）。"""
 
 
 def _build_logger() -> logging.Logger:

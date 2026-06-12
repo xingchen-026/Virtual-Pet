@@ -33,15 +33,30 @@ settings.TRANSPARENT_COLOR_KEY 后由 DesktopManager 设为透明色键，
 系统托盘（utils.tray.TrayIcon）运行在独立线程，菜单回调仅将动作
 放入队列，由主循环在 _process_tray_actions() 中统一处理，
 避免跨线程操作 Pygame / 窗口对象。
+
+AI 对话集成方式：
+
+    Pet -> AIService -> LLM
+
+ChatWindow 仅负责输入框/消息历史的渲染与按键解析；用户提交消息后，
+Game 在独立线程中调用 AIService.chat()（避免阻塞主循环/动画），
+结果通过 queue.Queue 回传，由 _process_ai_replies() 在主循环中
+统一写回 ChatWindow 与宠物记忆。AIService 内部根据
+EmotionAnalyzer 的分析结果调整 Pet 属性，并通过 PetBehavior
+触发对应的临时动画（如"你累了吗？" -> energy-5、播放 sleep 动画）。
 """
 
 import queue
 import sys
+import threading
 
 import pygame
 
 from config import settings
 from core.action import BehaviorManager
+from core.ai.ai_service import AIService
+from core.ai.memory import MemoryManager
+from core.ai.personality import PersonalityManager
 from core.animation import Animation, AnimationManager, AnimationState
 from core.autonomous import AutonomousManager
 from core.behavior import PetBehavior
@@ -52,6 +67,7 @@ from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
 from core.sprite import PetSprite
+from ui.chat_window import ChatWindow
 from utils.behavior_logger import BehaviorLogger
 from utils.helper import load_json, save_json
 from utils.tray import TrayIcon
@@ -119,6 +135,22 @@ class Game:
         self.debug_font = pygame.font.SysFont(None, 20)
         self.feedback_overlay = FeedbackOverlay(self.debug_font)
 
+        # AI 服务：Pet -> AIService -> LLM，人格/记忆数据持久化到 data/ 下的 JSON 文件
+        ai_config = load_json(settings.AI_CONFIG_FILE) or {}
+        self.personality = PersonalityManager()
+        self.memory = MemoryManager()
+        self.ai_service = AIService(ai_config, self.personality, self.memory, self.behavior)
+
+        # AI 对话窗口：UI 与 AIService 解耦，AI 回复在后台线程获取，经队列回传主循环
+        chat_rect = pygame.Rect(
+            settings.CHAT_WINDOW_MARGIN,
+            settings.CHAT_WINDOW_MARGIN,
+            settings.WINDOW_WIDTH - 2 * settings.CHAT_WINDOW_MARGIN,
+            settings.CHAT_WINDOW_HEIGHT,
+        )
+        self.chat_window = ChatWindow(self.debug_font, chat_rect, pet_name=self.personality.name)
+        self._ai_replies: "queue.Queue[str]" = queue.Queue()
+
         # 系统托盘：菜单回调在后台线程执行，仅将动作放入队列，主循环统一处理
         self._tray_actions: "queue.Queue[str]" = queue.Queue()
         self.tray_icon = TrayIcon(
@@ -158,10 +190,28 @@ class Game:
         self._quit()
 
     def _handle_events(self):
-        """处理窗口事件：关闭窗口，以及鼠标/键盘交互事件。"""
+        """处理窗口事件：关闭窗口，AI 对话窗口输入，以及鼠标/键盘交互事件。
+
+        AI 对话窗口打开时，键盘事件（文本输入/退格/回车/Esc）与鼠标滚轮
+        事件由 ChatWindow 处理，不再转发给 InteractionManager，
+        避免输入聊天内容时触发喂食/玩耍等功能按键。
+        """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+                continue
+
+            if event.type == pygame.KEYDOWN and not self.chat_window.visible:
+                if pygame.key.name(event.key) == settings.CHAT_TOGGLE_KEY:
+                    self.chat_window.toggle()
+                    continue
+
+            if self.chat_window.visible and event.type in (
+                pygame.KEYDOWN, pygame.TEXTINPUT, pygame.MOUSEWHEEL,
+            ):
+                message = self.chat_window.handle_event(event)
+                if message:
+                    self._send_chat_message(message)
                 continue
 
             interaction_event = self.interaction_manager.handle_event(event)
@@ -200,6 +250,8 @@ class Game:
         if log_message is not None:
             self.behavior_logger.log(log_message)
 
+        self.ai_service.notify_interaction(self.pet, interaction_event.type.value)
+
     def _begin_window_drag(self):
         """开始拖拽：记录窗口移动的起始锚点（窗口移动拖拽）。
 
@@ -224,9 +276,32 @@ class Game:
         dy = cursor_y - start_cursor[1]
         self.desktop_manager.set_position(start_window[0] + dx, start_window[1] + dy)
 
+    def _send_chat_message(self, message: str) -> None:
+        """提交用户输入的聊天消息：显示在对话窗口，并在后台线程调用 AIService。
+
+        LLM 请求可能耗时（网络延迟/超时），在独立线程中执行以避免
+        阻塞主循环（动画刷新、置顶维持、托盘响应等）。
+        """
+        self.chat_window.add_message("user", message)
+        self.chat_window.set_pending(True)
+
+        def worker() -> None:
+            reply = self.ai_service.chat(self.pet, message)
+            self._ai_replies.put(reply)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _process_ai_replies(self) -> None:
+        """将后台线程中 AIService.chat() 返回的回复写回对话窗口。"""
+        while not self._ai_replies.empty():
+            reply = self._ai_replies.get_nowait()
+            self.chat_window.set_pending(False)
+            self.chat_window.add_message("pet", reply)
+
     def _update(self, dt: float):
-        """逐帧更新逻辑：处理托盘动作、推进宠物行为/自主行为决策/动画与交互提示。"""
+        """逐帧更新逻辑：处理托盘动作、AI 回复、宠物行为/自主行为决策/动画与交互提示。"""
         self._process_tray_actions()
+        self._process_ai_replies()
 
         self.behavior.update(dt)
         self.autonomous_manager.update(dt, self.interaction_manager.dragging)
@@ -270,6 +345,7 @@ class Game:
         self.pet_sprite.draw(self.screen)
         self._render_debug_info()
         self.feedback_overlay.draw(self.screen, FEEDBACK_TEXT_POS)
+        self.chat_window.draw(self.screen)
         pygame.display.flip()
 
     def _render_debug_info(self):
@@ -288,6 +364,8 @@ class Game:
             f" (day {self.autonomous_manager.schedule.day_count})",
             f"Desktop: {'on' if self.desktop_manager.supported else 'off'}"
             f" ({'visible' if self.desktop_manager.visible else 'hidden'})",
+            f"AI: {'online' if self.ai_service.available else 'offline'}"
+            f"  [{settings.CHAT_TOGGLE_KEY.upper()}] 聊天",
         ]
 
         x, y = DEBUG_TEXT_POS

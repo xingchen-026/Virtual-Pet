@@ -22,6 +22,13 @@ PET_BEHAVIOR_LOG_FILE = os.path.join(LOGS_DIR, "pet_behavior.log")
 # 桌面窗口参数配置文件（透明/置顶/初始位置等，禁止硬编码）
 DESKTOP_CONFIG_FILE = os.path.join(BASE_DIR, "config", "desktop_config.json")
 
+# AI 服务配置文件（模型供应商/模型名称/参数，禁止硬编码）
+AI_CONFIG_FILE = os.path.join(BASE_DIR, "config", "ai_config.json")
+
+# 宠物人格配置与记忆数据文件
+PERSONALITY_FILE = os.path.join(DATA_DIR, "personality.json")
+MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
+
 # ----- 窗口配置 -----
 WINDOW_WIDTH = 480
 WINDOW_HEIGHT = 480
@@ -105,3 +112,14 @@ EXCITED_CLICK_THRESHOLD = 3
 # 喂食 / 玩耍功能按键（对应 pygame.key.name() 返回值）
 FEED_KEY = "f"
 PLAY_KEY = "p"
+
+# ----- AI 对话窗口配置 -----
+# 打开/关闭 AI 对话窗口的按键（对应 pygame.key.name() 返回值）
+CHAT_TOGGLE_KEY = "c"
+
+# 对话窗口在主窗口中的边距与尺寸
+CHAT_WINDOW_MARGIN = 20
+CHAT_WINDOW_HEIGHT = 320
+
+# AI 情绪联动触发的临时动画播放时长（秒）
+AI_EFFECT_ANIMATION_DURATION = 2.0
