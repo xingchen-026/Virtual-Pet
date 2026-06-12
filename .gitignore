@@ -7,3 +7,6 @@ __pycache__/
 
 # Claude Code local config
 .claude/
+
+# 自主行为系统运行日志（运行时生成，无需入库）
+logs/

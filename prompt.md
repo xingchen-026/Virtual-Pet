@@ -1,6 +1,6 @@
 ## 角色
 
-你是一名资深 Python 游戏交互开发工程师，同时具备 AI 辅助开发（Vibe Coding）项目实践经验。
+你是一名资深 Python 游戏 AI 行为系统开发工程师，同时具备 AI 辅助开发（Vibe Coding）项目实践经验。
 
 当前正在继续开发桌面虚拟宠物应用。
 
@@ -13,394 +13,427 @@
 * Sprite 渲染系统
 * 状态机系统
 * 饥饿 / 心情 / 体力属性系统
-* 状态自动变化与动画联动
+* 鼠标拖拽系统
+* 点击互动系统
+* 喂食与玩耍行为系统
 
 当前阶段目标：
 
-实现桌宠交互系统，让用户可以通过鼠标与宠物进行互动。
+实现桌宠自主行为系统。
 
-本阶段重点：
+让宠物不再只是等待用户操作，而是能够：
 
-1. 鼠标拖拽移动
-2. 点击宠物反馈
-3. 喂食行为
-4. 玩耍行为
-5. 交互行为驱动属性变化和动画变化
+* 自动移动
+* 随机探索
+* 自动切换动作
+* 根据状态产生不同表情
+* 模拟真实宠物生命周期
 
 开发原则：
 
-1. 基于已有架构扩展，不重构已有模块。
-2. 交互逻辑独立管理，不直接写入 Pet 类。
-3. 行为系统需要支持未来增加更多动作。
-4. 所有交互必须通过事件系统处理。
-5. 每完成一个阶段等待确认，不提前开发后续功能。
+1. 基于已有状态机和行为系统扩展。
+2. 不修改已有交互逻辑。
+3. 自主行为必须通过行为管理系统控制。
+4. 不允许直接在 Game 主循环中堆积 AI 判断逻辑。
+5. 所有行为需要可配置。
+6. 每完成一个阶段等待确认，不提前开发后续功能。
 
 开发流程：
 
-需求分析 → Prompt拆解 → AI生成代码 → 人工审核 → 测试优化。
+需求分析 → Prompt 拆解 → AI生成代码 → 人工审核 → 测试优化。
 
 ---
 
 # 开发任务
 
-## 1. 创建交互管理模块
+## 1. 创建宠物自主行为系统
 
-新增：
+新增模块：
 
-```
+```id="2ih7rh"
 core/
 
-├── interaction.py       # 用户交互管理
-├── event.py             # 游戏事件定义
-└── action.py            # 宠物行为动作
+├── autonomous.py        # 自主行为控制
+├── behavior_tree.py     # 行为决策树
+├── movement.py          # 移动控制
+└── schedule.py          # 生命周期调度
 ```
 
 设计：
 
-InteractionManager 类。
+AutonomousManager 类。
 
 负责：
 
-* 鼠标事件监听
-* 点击检测
-* 拖拽处理
-* 行为触发
-
-示例：
-
-```python
-interaction.handle_event(event)
-```
-
----
-
-# 2. 实现桌宠鼠标拖拽功能
-
-目标：
-
-用户可以按住宠物并拖动。
-
-实现：
-
-鼠标按下：
-
-判断：
-
-```python
-mouse_position in pet_rect
-```
-
-进入：
-
-```python
-dragging=True
-```
-
-鼠标移动：
-
-更新：
-
-```python
-pet.position
-```
-
-鼠标释放：
-
-```python
-dragging=False
-```
-
-要求：
-
-* 拖动过程中宠物跟随鼠标移动。
-* 不影响动画播放。
-* 不产生位置跳动。
-
----
-
-# 3. 增加点击互动系统
-
-实现：
-
-点击宠物触发反馈。
-
-点击行为：
-
-普通点击：
-
-效果：
-
-```
-mood +5
-energy -2
-animation = happy
-```
-
-连续点击：
-
-触发：
-
-```
-excited状态
-```
-
-要求：
-
-设计：
-
-ClickCounter
-
-记录：
-
-* 点击次数
-* 点击时间间隔
-
-用于未来扩展特殊行为。
-
----
-
-# 4. 实现喂食系统
-
-新增：
-
-```python
-core/
-
-food.py
-```
-
-设计：
-
-Food 类。
-
-包含：
-
-```python
-name
-hunger_restore
-mood_restore
-```
-
-示例：
-
-```python
-food = Food(
-    "Apple",
-    hunger_restore=20
-)
-```
-
-实现：
-
-喂食行为：
-
-效果：
-
-```
-hunger +20
-mood +10
-```
-
-同时：
-
-触发：
-
-```
-animation = happy
-```
-
-要求：
-
-属性最大值限制保持：
-
-0-100
-
----
-
-# 5. 实现玩耍系统
-
-新增行为：
-
-PlayAction
-
-效果：
-
-```
-mood +20
-
-energy -15
-
-hunger -10
-```
-
-触发：
-
-```
-happy animation
-```
-
-要求：
-
-玩耍逻辑独立。
-
-未来可以扩展：
-
-* 小游戏
-* 玩具
-* 道具系统
-
----
-
-# 6. 建立行为系统
-
-新增：
-
-```
-BehaviorManager
-```
-
-负责：
-
-统一管理：
-
-* Feed
-* Play
-* Click
-* Drag
+* 判断宠物当前状态
+* 选择自动行为
+* 执行动作
+* 控制行为频率
 
 结构：
 
-```
-User Input
+```id="j1q7j7"
+Pet State
 
     ↓
 
-InteractionManager
+AutonomousManager
 
     ↓
 
-BehaviorManager
+Behavior Decision
 
     ↓
 
-Pet Attribute
+Action Execute
 
     ↓
 
-StateMachine
-
-    ↓
-
-AnimationManager
-```
-
-要求：
-
-保持模块之间低耦合。
-
----
-
-# 7. 添加交互动画反馈
-
-新增动画状态：
-
-```
-INTERACT
-
-EXCITED
-
-EATING
-
-PLAYING
-```
-
-扩展：
-
-```python
-AnimationState
-```
-
-要求：
-
-行为触发后：
-
-自动切换动画。
-
-例如：
-
-喂食：
-
-```
-FeedAction
-
-↓
-
-EATING animation
-```
-
-玩耍：
-
-```
-PlayAction
-
-↓
-
-PLAYING animation
+Animation Update
 ```
 
 ---
 
-# 8. 添加交互提示 UI
+# 2. 实现随机漫游系统
 
-增加简单提示：
+目标：
 
-例如：
-
-用户点击后显示：
-
-```
-+5 Mood
-```
-
-喂食：
-
-```
-Hungry ↓
-Happy ↑
-```
-
-要求：
-
-提示显示：
-
-* 自动消失
-* 不阻塞游戏
-
----
-
-# 9. 数据保存扩展
-
-保存：
+宠物可以在窗口范围内随机移动。
 
 新增：
 
-```
-last_action
-interaction_count
+MovementController
+
+功能：
+
+* 随机生成目标位置
+* 控制移动速度
+* 平滑移动
+* 到达目标后重新选择位置
+
+例如：
+
+```python id="zv21yw"
+move_to(random_position)
 ```
 
-示例：
+要求：
+
+移动规则：
+
+* 不超出窗口边界。
+* 移动过程中播放 walking 动画。
+* 停止后恢复 idle 动画。
+
+---
+
+# 3. 增加移动动画状态
+
+扩展：
+
+AnimationState
+
+新增：
+
+```python id="fdh1bb"
+WALK
+RUN
+LOOK_AROUND
+SLEEP
+```
+
+行为对应：
+
+移动：
+
+```
+WALK animation
+```
+
+快速移动：
+
+```
+RUN animation
+```
+
+观察：
+
+```
+LOOK_AROUND animation
+```
+
+睡觉：
+
+```
+SLEEP animation
+```
+
+要求：
+
+动画切换由行为驱动。
+
+---
+
+# 4. 实现空闲行为系统
+
+设计：
+
+IdleBehavior
+
+宠物处于空闲状态时随机执行：
+
+行为列表：
+
+## 看周围
+
+效果：
+
+```
+LOOK_AROUND
+```
+
+## 打哈欠
+
+效果：
+
+```
+TIRED animation
+```
+
+## 睡觉
+
+条件：
+
+```
+energy < 20
+```
+
+效果：
+
+```
+SLEEP animation
+```
+
+## 开心动作
+
+条件：
+
+```
+mood > 80
+```
+
+效果：
+
+```
+HAPPY animation
+```
+
+要求：
+
+行为随机概率可配置。
+
+例如：
 
 ```json
 {
-"name":"Pet",
-"hunger":80,
-"mood":90,
-"energy":70,
-"last_action":"feed",
-"interaction_count":15
+"idle_action_probability":0.3
 }
 ```
+
+---
+
+# 5. 实现状态影响行为决策
+
+根据宠物属性调整行为。
+
+规则：
+
+## 饥饿
+
+条件：
+
+```
+hunger < 30
+```
+
+行为：
+
+* 减少移动
+* 增加寻找食物动作
+* 播放 hungry 动画
+
+---
+
+## 疲劳
+
+条件：
+
+```
+energy < 30
+```
+
+行为：
+
+* 降低移动速度
+* 增加休息概率
+
+---
+
+## 开心
+
+条件：
+
+```
+mood > 80
+```
+
+行为：
+
+* 增加随机活动
+* 播放快乐动作
+
+要求：
+
+行为系统不能修改属性。
+
+只能产生行为。
+
+---
+
+# 6. 实现生命周期时间系统
+
+新增：
+
+ScheduleManager
+
+模拟：
+
+时间流逝。
+
+例如：
+
+每分钟：
+
+```
+hunger - 1
+```
+
+每五分钟：
+
+```
+energy - 5
+```
+
+根据时间：
+
+触发：
+
+* 白天活动
+* 夜晚睡眠
+
+要求：
+
+不要使用真实分钟阻塞程序。
+
+使用：
+
+pygame.time
+
+---
+
+# 7. 添加宠物表情系统
+
+新增：
+
+EmotionManager
+
+管理：
+
+```python id="9r7j7f"
+happy
+sad
+angry
+hungry
+sleepy
+excited
+```
+
+根据：
+
+* 属性
+* 行为
+* 用户操作
+
+自动切换。
+
+例如：
+
+用户喂食：
+
+```
+happy expression
+```
+
+长期饥饿：
+
+```
+sad expression
+```
+
+---
+
+# 8. 增加行为日志系统
+
+新增：
+
+```id="y7h2fj"
+logs/
+
+pet_behavior.log
+```
+
+记录：
+
+例如：
+
+```
+12:01 Pet started walking
+
+12:05 Pet became hungry
+
+12:08 User fed pet
+```
+
+用于：
+
+调试 AI 行为。
+
+---
+
+# 9. 配置化行为参数
+
+新增：
+
+```id="v4x5zq"
+config/
+
+behavior_config.json
+```
+
+保存：
+
+```json
+{
+"walk_speed":2,
+"idle_time":5,
+"random_walk":true,
+"sleep_threshold":20
+}
+```
+
+要求：
+
+禁止硬编码行为参数。
 
 ---
 
@@ -408,14 +441,14 @@ interaction_count
 
 当前阶段禁止实现：
 
-* 桌面透明窗口
-* 开机启动
-* 随机漫游
-* 网络通信
-* AI聊天
 * 多宠物系统
+* 网络同步
+* AI聊天
+* 语音交互
+* 云端数据
+* 商店系统
 
-这些将在后续阶段实现。
+这些将在后续阶段开发。
 
 ---
 
@@ -423,44 +456,34 @@ interaction_count
 
 1. 遵循 Python PEP8。
 
-2. 所有交互逻辑必须模块化。
+2. 使用面向对象设计。
 
-3. 不允许：
+3. 行为决策和执行分离。
+
+禁止：
 
 ```python
-if click:
-    pet.hunger += 20
+if hungry:
+    move=False
 ```
 
-直接写大量业务逻辑。
+推荐：
 
-必须：
-
-```
-事件
+```python
+State
 
 ↓
 
-行为
+Behavior Decision
 
 ↓
 
-属性变化
+Action
 ```
 
-4. 支持未来扩展：
+4. 所有概率、速度、阈值配置化。
 
-例如：
-
-```
-BathAction
-
-SleepAction
-
-GiftAction
-```
-
-5. 添加必要类型提示和注释。
+5. 保持与已有模块兼容。
 
 ---
 
@@ -468,30 +491,29 @@ GiftAction
 
 已经完成：
 
-✅ Pygame基础环境
-
-✅ 宠物对象
+✅ 项目基础架构
 
 ✅ 动画系统
 
-✅ 状态机系统
+✅ 状态机
 
-✅ 属性养成系统
+✅ 属性养成
 
-✅ 自动状态变化
+✅ 用户交互
+
+✅ 喂食与玩耍
 
 当前阶段目标：
 
-实现完整桌宠交互能力。
+实现桌宠自主生命系统。
 
 完成后项目应该具备：
 
-* 用户可以拖动宠物
-* 用户可以点击宠物
-* 用户可以喂食
-* 用户可以陪宠物玩耍
-* 行为影响属性
-* 行为影响动画
+* 宠物自动移动
+* 自动执行行为
+* 根据状态改变行为
+* 自动切换表情
+* 模拟宠物生命周期
 
 ---
 
@@ -501,14 +523,16 @@ GiftAction
 
 2. 修改文件列表
 
-3. 交互系统架构说明
+3. 自主行为系统架构说明
 
-4. 每个文件完整代码
+4. 行为决策流程图
 
-5. 交互测试案例
+5. 每个文件完整代码
 
-6. 属性变化测试结果
+6. 自动行为测试案例
 
-7. 当前阶段完成总结
+7. 随机漫游测试结果
+
+8. 当前阶段完成总结
 
 完成后停止，等待下一阶段指令。

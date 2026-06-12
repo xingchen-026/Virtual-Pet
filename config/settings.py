@@ -12,6 +12,13 @@ ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 PET_DATA_FILE = os.path.join(DATA_DIR, "pet_data.json")
 
+# 自主行为参数配置文件（行为概率、速度、阈值等，禁止硬编码）
+BEHAVIOR_CONFIG_FILE = os.path.join(BASE_DIR, "config", "behavior_config.json")
+
+# 行为日志目录与文件
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+PET_BEHAVIOR_LOG_FILE = os.path.join(LOGS_DIR, "pet_behavior.log")
+
 # ----- 窗口配置 -----
 WINDOW_WIDTH = 480
 WINDOW_HEIGHT = 480
@@ -41,6 +48,10 @@ ANIMATION_FOLDERS = {
     "excited": "excited",
     "eating": "eating",
     "playing": "playing",
+    "walk": "walk",
+    "run": "run",
+    "look_around": "look_around",
+    "sleep": "sleep",
 }
 
 # 动画状态名称 -> 单帧播放时长（秒），数值越小播放越快
@@ -53,6 +64,10 @@ ANIMATION_FRAME_DURATIONS = {
     "excited": 0.08,
     "eating": 0.25,
     "playing": 0.12,
+    "walk": 0.15,
+    "run": 0.08,
+    "look_around": 0.30,
+    "sleep": 0.50,
 }
 
 # 宠物默认动画状态

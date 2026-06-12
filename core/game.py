@@ -8,6 +8,13 @@
     User Input -> InteractionManager -> BehaviorManager
         -> Pet Attribute -> StateMachine -> AnimationManager
 
+自主行为系统集成方式：
+
+    Pet State -> AutonomousManager -> Behavior Decision
+        -> Action Execute -> Animation Update
+
+用户交互优先：拖拽宠物时自主行为暂停，避免两套系统争夺位置/动画。
+
 结构上为后续接入桌宠透明窗口、置顶显示等功能预留空间。
 """
 
@@ -18,6 +25,7 @@ import pygame
 from config import settings
 from core.action import BehaviorManager
 from core.animation import Animation, AnimationManager, AnimationState
+from core.autonomous import AutonomousManager
 from core.behavior import PetBehavior
 from core.event import InteractionEvent, InteractionEventType
 from core.feedback import FeedbackOverlay
@@ -25,7 +33,16 @@ from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
 from core.sprite import PetSprite
+from utils.behavior_logger import BehaviorLogger
 from utils.helper import load_json, save_json
+
+# 用户交互事件 -> 行为日志文案
+INTERACTION_LOG_MESSAGES = {
+    InteractionEventType.CLICK: "User clicked pet",
+    InteractionEventType.EXCITED: "User excited pet with repeated clicks",
+    InteractionEventType.FEED: "User fed pet",
+    InteractionEventType.PLAY: "User played with pet",
+}
 
 # 调试信息文字颜色与起始绘制位置
 DEBUG_TEXT_COLOR = (30, 30, 30)
@@ -33,7 +50,7 @@ DEBUG_TEXT_POS = (10, 10)
 DEBUG_LINE_HEIGHT = 20
 
 # 交互提示文字起始绘制位置
-FEEDBACK_TEXT_POS = (10, 160)
+FEEDBACK_TEXT_POS = (10, 220)
 
 
 class Game:
@@ -60,6 +77,13 @@ class Game:
         # 交互系统：用户输入 -> InteractionManager -> BehaviorManager
         self.interaction_manager = InteractionManager(self.pet_sprite)
         self.behavior_manager = BehaviorManager()
+
+        # 自主行为系统：Pet State -> AutonomousManager -> Behavior Decision -> Action
+        behavior_config = load_json(settings.BEHAVIOR_CONFIG_FILE)
+        self.behavior_logger = BehaviorLogger(settings.PET_BEHAVIOR_LOG_FILE)
+        self.autonomous_manager = AutonomousManager(
+            self.pet, self.behavior, behavior_config, self.behavior_logger
+        )
 
         self.debug_font = pygame.font.SysFont(None, 20)
         self.feedback_overlay = FeedbackOverlay(self.debug_font)
@@ -117,9 +141,14 @@ class Game:
         self.behavior.trigger_temporary_animation(result.animation, result.duration)
         self.feedback_overlay.show(result.message)
 
+        log_message = INTERACTION_LOG_MESSAGES.get(interaction_event.type)
+        if log_message is not None:
+            self.behavior_logger.log(log_message)
+
     def _update(self, dt: float):
-        """逐帧更新逻辑：推进宠物行为（属性衰减/状态切换）、动画播放进度与交互提示。"""
+        """逐帧更新逻辑：推进宠物行为、自主行为决策、动画播放进度与交互提示。"""
         self.behavior.update(dt)
+        self.autonomous_manager.update(dt, self.interaction_manager.dragging)
         self.pet_sprite.update(dt)
         self.feedback_overlay.update(dt)
 
@@ -134,13 +163,17 @@ class Game:
     def _render_debug_info(self):
         """在窗口左上角绘制宠物名称、状态与各属性数值，便于开发调试。"""
         lines = [
-            f"Name: {self.pet.name}",
+            f"Name: {self.pet.name}  Age: {self.pet.age}",
             f"State: {self.pet.current_state.name}",
             f"Hunger: {self.pet.hunger:.1f}",
             f"Mood: {self.pet.mood:.1f}",
             f"Energy: {self.pet.energy:.1f}",
             f"Last action: {self.pet.last_action}",
             f"Interactions: {self.pet.interaction_count}",
+            f"Behavior: {self.autonomous_manager.current_behavior.name}",
+            f"Emotion: {self.autonomous_manager.emotion.name}",
+            f"Time: {self.autonomous_manager.schedule.time_of_day()}"
+            f" (day {self.autonomous_manager.schedule.day_count})",
         ]
 
         x, y = DEBUG_TEXT_POS

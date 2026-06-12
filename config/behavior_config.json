@@ -1,0 +1,31 @@
+{
+    "walk_speed": 40,
+    "run_speed": 90,
+    "movement_margin": 20,
+    "arrival_threshold": 4,
+
+    "idle_time": 4.0,
+    "random_walk": true,
+    "idle_action_probability": 0.5,
+
+    "look_around_duration": 1.0,
+    "yawn_duration": 1.2,
+    "happy_duration": 1.0,
+    "sleep_duration": 6.0,
+
+    "hunger_threshold": 30,
+    "tired_threshold": 30,
+    "sleep_threshold": 20,
+    "happy_threshold": 80,
+    "sad_threshold": 20,
+    "angry_hunger_threshold": 10,
+
+    "tired_sleep_probability": 0.4,
+    "happy_run_probability": 0.4,
+    "hungry_speed_multiplier": 0.5,
+    "tired_speed_multiplier": 0.6,
+
+    "day_length_seconds": 120,
+    "night_ratio": 0.4,
+    "days_per_age_year": 1
+}

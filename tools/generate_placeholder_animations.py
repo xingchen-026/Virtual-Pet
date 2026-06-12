@@ -34,12 +34,16 @@ def _new_frame(
     eye_offset: int,
     mouth_points: Sequence[Tuple[int, int]] = None,
     mouth_circle: Tuple[Tuple[int, int], int] = None,
+    eye_shift_x: int = 0,
+    eyes_closed: bool = False,
 ) -> pygame.Surface:
     """绘制一帧宠物占位图：圆形身体 + 两只眼睛 + 嘴部（线条或圆形）。
 
     mouth_points: 嘴部线条的顶点序列（闭嘴/微笑等）。
     mouth_circle: (中心坐标, 半径)，用于绘制张开的嘴（如进食动画）。
     两者可二选一，均为 None 时不绘制嘴部。
+    eye_shift_x: 双眼整体水平偏移量（用于 look_around 左右观察）。
+    eyes_closed: 为 True 时眼睛绘制为闭合的横线（用于 sleep）。
     """
     surface = pygame.Surface(FRAME_SIZE, pygame.SRCALPHA)
     cx, cy = CENTER
@@ -47,8 +51,15 @@ def _new_frame(
     pygame.draw.circle(surface, body_color, CENTER, BODY_RADIUS)
 
     eye_y = cy - 8 + eye_offset
-    pygame.draw.circle(surface, EYE_COLOR, (cx - 14, eye_y), 4)
-    pygame.draw.circle(surface, EYE_COLOR, (cx + 14, eye_y), 4)
+    left_eye_x = cx - 14 + eye_shift_x
+    right_eye_x = cx + 14 + eye_shift_x
+
+    if eyes_closed:
+        pygame.draw.line(surface, EYE_COLOR, (left_eye_x - 4, eye_y), (left_eye_x + 4, eye_y), 2)
+        pygame.draw.line(surface, EYE_COLOR, (right_eye_x - 4, eye_y), (right_eye_x + 4, eye_y), 2)
+    else:
+        pygame.draw.circle(surface, EYE_COLOR, (left_eye_x, eye_y), 4)
+        pygame.draw.circle(surface, EYE_COLOR, (right_eye_x, eye_y), 4)
 
     if mouth_points:
         pygame.draw.lines(surface, EYE_COLOR, False, mouth_points, 3)
@@ -150,6 +161,52 @@ def _build_playing_frames() -> List[pygame.Surface]:
     ]
 
 
+def _build_walk_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    smile = [(cx - 12, cy + 14), (cx, cy + 18), (cx + 12, cy + 14)]
+    color = (100, 200, 180)
+    return [
+        _new_frame(color, 0, smile),
+        _new_frame(color, 4, smile),
+        _new_frame(color, 0, smile),
+        _new_frame(color, -4, smile),
+    ]
+
+
+def _build_run_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    open_smile = [(cx - 14, cy + 10), (cx, cy + 20), (cx + 14, cy + 10)]
+    color = (255, 140, 60)
+    return [
+        _new_frame(color, -8, open_smile),
+        _new_frame(color, 8, open_smile),
+        _new_frame(color, -8, open_smile),
+        _new_frame(color, 8, open_smile),
+    ]
+
+
+def _build_look_around_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    flat_mouth = [(cx - 12, cy + 16), (cx + 12, cy + 16)]
+    color = (160, 200, 255)
+    return [
+        _new_frame(color, 0, flat_mouth, eye_shift_x=0),
+        _new_frame(color, 0, flat_mouth, eye_shift_x=-6),
+        _new_frame(color, 0, flat_mouth, eye_shift_x=0),
+        _new_frame(color, 0, flat_mouth, eye_shift_x=6),
+    ]
+
+
+def _build_sleep_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    closed_mouth = [(cx - 8, cy + 16), (cx + 8, cy + 16)]
+    color = (150, 150, 200)
+    return [
+        _new_frame(color, 0, closed_mouth, eyes_closed=True),
+        _new_frame(color, 2, closed_mouth, eyes_closed=True),
+    ]
+
+
 ANIMATION_FRAME_BUILDERS = {
     "idle": _build_idle_frames,
     "happy": _build_happy_frames,
@@ -159,6 +216,10 @@ ANIMATION_FRAME_BUILDERS = {
     "excited": _build_excited_frames,
     "eating": _build_eating_frames,
     "playing": _build_playing_frames,
+    "walk": _build_walk_frames,
+    "run": _build_run_frames,
+    "look_around": _build_look_around_frames,
+    "sleep": _build_sleep_frames,
 }
 
 

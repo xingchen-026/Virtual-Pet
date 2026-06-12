@@ -70,6 +70,16 @@ class PetBehavior:
         self.pet.change_animation(animation)
         self._temp_animation_timer = duration
 
+    def sync_to_state_animation(self) -> None:
+        """立即恢复为 pet.current_state 对应的动画，并清除临时动画计时。
+
+        供持续时长不固定的行为（如自主漫游 walk/run）使用：
+        行为开始时直接调用 pet.change_animation() 切换动画，
+        行为结束时调用本方法立即恢复为状态对应动画。
+        """
+        self._temp_animation_timer = 0.0
+        self._sync_animation()
+
     def _tick(self) -> None:
         """单次属性自然变化，并在状态变化时刷新动画。"""
         self.pet.decrease_hunger(settings.HUNGER_DECAY_PER_TICK)
