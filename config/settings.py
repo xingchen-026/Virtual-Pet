@@ -49,3 +49,15 @@ ANIMATION_FRAME_DURATIONS = {
 
 # 宠物默认动画状态
 DEFAULT_ANIMATION_STATE = "idle"
+
+# ----- 属性随时间变化配置 -----
+# 属性自然衰减的计时间隔（秒）。开发/测试阶段取较小值，
+# 正式发布时可调大（如 60）。
+ATTRIBUTE_DECAY_INTERVAL = 5.0
+
+# 每个间隔内饥饿值、体力值的衰减量
+HUNGER_DECAY_PER_TICK = 1
+ENERGY_DECAY_PER_TICK = 1
+
+# 非开心状态下，每个间隔内心情值的衰减量
+MOOD_DECAY_PER_TICK = 0.2

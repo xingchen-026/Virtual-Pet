@@ -29,7 +29,10 @@ VirtualPet/
 │   ├── animation.py          # 动画状态枚举与播放控制
 │   ├── sprite.py             # 宠物 Sprite 渲染
 │   ├── lottie_loader.py       # Lottie 动画加载接口（预留）
-│   └── resource.py           # 资源管理（图片 / 动画缓存）
+│   ├── resource.py           # 资源管理（图片 / 动画缓存）
+│   ├── pet_state.py           # 宠物行为状态枚举
+│   ├── state_machine.py       # 状态机：根据属性计算状态
+│   └── behavior.py            # 行为逻辑：属性衰减、状态/动画同步
 │
 ├── assets/
 │   ├── images/               # 图片资源
@@ -89,12 +92,26 @@ VirtualPet/
 - 新增 `tools/generate_placeholder_animations.py`：在正式美术资源到位前，
   生成简单的占位动画帧，写入 `assets/animations/<state>/`
 
+**第三阶段：宠物状态机系统**
+
+- 新增 `PetState` 状态枚举（IDLE / HAPPY / HUNGRY / TIRED / SAD，SAD 预留）
+- 新增 `core/state_machine.py` 中的 `StateMachine`：根据 hunger / mood / energy
+  独立计算当前状态（饥饿 > 疲劳 > 开心 > 默认），不依赖 Pet 或动画系统
+- `Pet` 新增 `current_state` 属性，以及 `increase_/decrease_hunger/mood/energy()`
+  相对修改接口（自动限制在 0~100）
+- 新增 `core/behavior.py` 中的 `PetBehavior`：基于计时器（默认 5 秒一次）
+  使饥饿 / 体力衰减、心情按状态衰减，并在状态变化时调用
+  `pet.change_animation()` 同步动画（状态不变时不重复切换）
+- `Game` 主循环集成 `PetBehavior`，并在窗口左上角绘制调试信息
+  （Name / State / Hunger / Mood / Energy）
+- `data/pet_data.json` 增加 `state` 字段；游戏启动时自动读取存档，
+  关闭窗口时自动保存当前属性与状态
+
 ## 后续开发计划
 
 - 桌宠透明窗口与窗口置顶显示
 - 鼠标拖拽互动
-- 饥饿 / 心情 / 体力数值系统与状态机
-- 喂食、玩耍等交互功能
-- 数据自动保存与恢复
+- 喂食、玩耍等交互功能（驱动 increase_hunger / increase_mood 等接口）
 - 可扩展的宠物养成系统
 - 接入正式美术资源 / Lottie 动画，替换占位动画帧
+- 为 SAD 等新状态补充专属动画资源
