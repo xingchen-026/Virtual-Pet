@@ -37,6 +37,10 @@ ANIMATION_FOLDERS = {
     "happy": "happy",
     "hungry": "hungry",
     "tired": "tired",
+    "interact": "interact",
+    "excited": "excited",
+    "eating": "eating",
+    "playing": "playing",
 }
 
 # 动画状态名称 -> 单帧播放时长（秒），数值越小播放越快
@@ -45,6 +49,10 @@ ANIMATION_FRAME_DURATIONS = {
     "happy": 0.10,
     "hungry": 0.25,
     "tired": 0.35,
+    "interact": 0.15,
+    "excited": 0.08,
+    "eating": 0.25,
+    "playing": 0.12,
 }
 
 # 宠物默认动画状态
@@ -61,3 +69,12 @@ ENERGY_DECAY_PER_TICK = 1
 
 # 非开心状态下，每个间隔内心情值的衰减量
 MOOD_DECAY_PER_TICK = 0.2
+
+# ----- 交互配置 -----
+# 连续点击触发 excited 状态：window 秒内点击次数达到 threshold 即触发
+EXCITED_CLICK_WINDOW = 1.0
+EXCITED_CLICK_THRESHOLD = 3
+
+# 喂食 / 玩耍功能按键（对应 pygame.key.name() 返回值）
+FEED_KEY = "f"
+PLAY_KEY = "p"

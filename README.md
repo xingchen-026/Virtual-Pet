@@ -32,7 +32,12 @@ VirtualPet/
 │   ├── resource.py           # 资源管理（图片 / 动画缓存）
 │   ├── pet_state.py           # 宠物行为状态枚举
 │   ├── state_machine.py       # 状态机：根据属性计算状态
-│   └── behavior.py            # 行为逻辑：属性衰减、状态/动画同步
+│   ├── behavior.py            # 行为逻辑：属性衰减、状态/动画同步、临时动画
+│   ├── event.py               # 交互事件类型与数据结构
+│   ├── interaction.py         # 用户交互管理（点击 / 拖拽 / 按键）
+│   ├── action.py              # 宠物行为动作与 BehaviorManager
+│   ├── food.py                # 食物数据结构（喂食系统）
+│   └── feedback.py            # 交互提示 UI（自动消失的提示文字）
 │
 ├── assets/
 │   ├── images/               # 图片资源
@@ -40,7 +45,11 @@ VirtualPet/
 │   │   ├── idle/              # 待机动画帧
 │   │   ├── happy/             # 开心动画帧
 │   │   ├── hungry/            # 饥饿动画帧
-│   │   └── tired/             # 疲劳动画帧
+│   │   ├── tired/             # 疲劳动画帧
+│   │   ├── interact/          # 触摸反馈动画帧
+│   │   ├── excited/           # 兴奋动画帧
+│   │   ├── eating/            # 进食动画帧
+│   │   └── playing/           # 玩耍动画帧
 │   └── sounds/               # 音频资源
 │
 ├── data/
@@ -107,11 +116,38 @@ VirtualPet/
 - `data/pet_data.json` 增加 `state` 字段；游戏启动时自动读取存档，
   关闭窗口时自动保存当前属性与状态
 
+**第四阶段：交互系统**
+
+- 新增 `core/event.py`：`InteractionEventType` 枚举（CLICK / EXCITED / DRAG_START /
+  DRAG_MOVE / DRAG_END / FEED / PLAY）与 `InteractionEvent` 数据结构
+- 新增 `core/interaction.py`：`InteractionManager` 监听鼠标按下/移动/释放与键盘事件，
+  识别点击、拖拽（保留抓取偏移量，宠物跟随鼠标且不产生位置跳动）与连续点击；
+  `ClickCounter` 记录点击时间戳，短时间内连续点击触发 excited
+- 新增 `core/food.py`：`Food` 数据类（name / hunger_restore / mood_restore）及默认食物
+- 新增 `core/action.py`：`ClickAction` / `ExcitedAction` / `TouchAction` /
+  `FeedAction` / `PlayAction` 等行为，均只通过 Pet 已有的
+  `increase_/decrease_*` 接口修改属性；`BehaviorManager` 统一分发
+  Click / Excited / Drag / Feed / Play 事件，遵循
+  `事件 -> 行为 -> 属性变化` 流程，并记录 `last_action` / `interaction_count`
+- 新增 `core/feedback.py`：`FeedbackOverlay` 管理屏幕提示文字的显示与自动消失
+- `core/animation.py` 的 `AnimationState` 新增 `INTERACT` / `EXCITED` /
+  `EATING` / `PLAYING`，并在 `tools/generate_placeholder_animations.py`
+  中补充对应占位动画帧
+- `core/behavior.py` 的 `PetBehavior` 新增 `trigger_temporary_animation()`：
+  播放交互触发的临时动画，结束后自动恢复为状态对应动画，
+  且临时动画播放期间不会被属性衰减引发的状态切换打断
+- `Pet` 新增 `last_action` / `interaction_count` 字段及 `record_interaction()`，
+  并写入 `to_dict()` / `from_dict()`
+- `Game` 集成 `InteractionManager` 与 `BehaviorManager`：
+  鼠标拖拽移动宠物、点击/连续点击/喂食（F 键）/玩耍（P 键）
+  均通过事件系统驱动属性变化、临时动画与提示文字
+- 数据流：`User Input -> InteractionManager -> BehaviorManager ->
+  Pet Attribute -> StateMachine -> AnimationManager`
+
 ## 后续开发计划
 
 - 桌宠透明窗口与窗口置顶显示
-- 鼠标拖拽互动
-- 喂食、玩耍等交互功能（驱动 increase_hunger / increase_mood 等接口）
-- 可扩展的宠物养成系统
+- 喂食 / 玩耍的图形化交互入口（按钮、拖放道具等）
+- 可扩展的宠物养成系统（BathAction / SleepAction / GiftAction 等）
 - 接入正式美术资源 / Lottie 动画，替换占位动画帧
 - 为 SAD 等新状态补充专属动画资源

@@ -4,5 +4,7 @@
     "hunger": 100,
     "mood": 100,
     "energy": 100,
-    "state": "IDLE"
+    "state": "IDLE",
+    "last_action": null,
+    "interaction_count": 0
 }

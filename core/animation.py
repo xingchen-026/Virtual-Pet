@@ -33,6 +33,10 @@ class AnimationState(enum.Enum):
     HAPPY = "happy"
     HUNGRY = "hungry"
     TIRED = "tired"
+    INTERACT = "interact"
+    EXCITED = "excited"
+    EATING = "eating"
+    PLAYING = "playing"
 
 
 class Animation:

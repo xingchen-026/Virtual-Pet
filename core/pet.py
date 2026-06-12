@@ -22,6 +22,8 @@ class Pet:
     current_state 记录宠物当前的行为状态（由 StateMachine 计算）。
     current_animation 记录当前动画状态（字符串值，对应 AnimationState）。
     behavior_state 字段在本阶段不会被使用，仅作为未来扩展点保留。
+    last_action / interaction_count 记录最近一次交互行为及累计交互次数，
+    由 core.action.BehaviorManager 在执行行为后更新。
     """
 
     def __init__(
@@ -48,6 +50,12 @@ class Pet:
 
         # 预留扩展字段：后续阶段将用于更多行为相关数据
         self.behavior_state = None
+
+        # 最近一次交互行为名称（对应 InteractionEventType 的值，如 "feed"）
+        self.last_action: Optional[str] = None
+
+        # 累计交互次数，由 BehaviorManager 在每次执行行为后更新
+        self.interaction_count = 0
 
     # ----- 属性修改接口（绝对赋值，自动限制范围） -----
     def set_name(self, name: str) -> None:
@@ -87,6 +95,11 @@ class Pet:
     def decrease_energy(self, amount: float = 1) -> None:
         self.set_energy(self.energy - amount)
 
+    def record_interaction(self, action_name: str) -> None:
+        """记录一次交互行为：更新最近行为名称并累加交互次数。"""
+        self.last_action = action_name
+        self.interaction_count += 1
+
     def change_animation(self, state: Union[AnimationState, str]) -> None:
         """切换宠物当前动画状态。
 
@@ -115,6 +128,8 @@ class Pet:
             "mood": self.mood,
             "energy": self.energy,
             "state": self.current_state.name,
+            "last_action": self.last_action,
+            "interaction_count": self.interaction_count,
         }
 
     @classmethod
@@ -128,6 +143,8 @@ class Pet:
             energy=data.get("energy", settings.DEFAULT_PET_ENERGY),
         )
         pet.current_state = PetState[data.get("state", PetState.IDLE.name)]
+        pet.last_action = data.get("last_action")
+        pet.interaction_count = data.get("interaction_count", 0)
         return pet
 
     def __repr__(self) -> str:

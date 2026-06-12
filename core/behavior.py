@@ -5,9 +5,11 @@
 * 基于计时器的属性随时间自然变化（饥饿 / 体力衰减，心情波动）
 * 调用 StateMachine 计算当前状态
 * 状态发生变化时同步 Pet.current_state 并驱动动画切换
+* 管理交互行为触发的临时动画（如 happy / eating / playing），
+  播放结束后自动恢复为当前状态对应的动画
 
 属性系统与动画系统通过本模块解耦：
-PetBehavior 只在状态变化时调用 pet.change_animation()，
+PetBehavior 只在状态变化或临时动画结束时调用 pet.change_animation()，
 Pet 与 AnimationManager 互不直接依赖。
 """
 
@@ -35,6 +37,10 @@ class PetBehavior:
         self.pet = pet
         self._elapsed = 0.0
 
+        # 临时动画剩余播放时间。大于 0 时，状态驱动的动画同步会被暂时跳过，
+        # 计时结束后自动恢复为 pet.current_state 对应的动画。
+        self._temp_animation_timer = 0.0
+
         # 启动时按 pet.current_state（可能来自存档）同步一次动画
         self._sync_animation()
 
@@ -43,11 +49,26 @@ class PetBehavior:
 
         dt: 距离上一次更新的时间间隔（秒）。
         """
+        if self._temp_animation_timer > 0:
+            self._temp_animation_timer -= dt
+            if self._temp_animation_timer <= 0:
+                self._temp_animation_timer = 0.0
+                self._sync_animation()
+
         self._elapsed += dt
 
         while self._elapsed >= settings.ATTRIBUTE_DECAY_INTERVAL:
             self._elapsed -= settings.ATTRIBUTE_DECAY_INTERVAL
             self._tick()
+
+    def trigger_temporary_animation(self, animation: str, duration: float) -> None:
+        """播放一段交互行为触发的临时动画（如 happy / eating / playing）。
+
+        animation: 对应 AnimationState 的字符串值。
+        duration: 播放时长（秒），结束后自动恢复为状态对应动画。
+        """
+        self.pet.change_animation(animation)
+        self._temp_animation_timer = duration
 
     def _tick(self) -> None:
         """单次属性自然变化，并在状态变化时刷新动画。"""
@@ -61,7 +82,10 @@ class PetBehavior:
         new_state = StateMachine.evaluate(self.pet.hunger, self.pet.mood, self.pet.energy)
         if new_state != self.pet.current_state:
             self.pet.current_state = new_state
-            self._sync_animation()
+            # 临时动画播放期间，状态切换不打断当前的交互反馈动画，
+            # 待临时动画结束后会自动按最新状态同步。
+            if self._temp_animation_timer <= 0:
+                self._sync_animation()
 
     def _sync_animation(self) -> None:
         """将动画切换为 pet.current_state 对应的动画。"""

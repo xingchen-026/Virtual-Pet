@@ -32,9 +32,15 @@ ASSETS_ANIMATIONS_DIR = os.path.join(
 def _new_frame(
     body_color: Tuple[int, int, int],
     eye_offset: int,
-    mouth_points: Sequence[Tuple[int, int]],
+    mouth_points: Sequence[Tuple[int, int]] = None,
+    mouth_circle: Tuple[Tuple[int, int], int] = None,
 ) -> pygame.Surface:
-    """绘制一帧宠物占位图：圆形身体 + 两只眼睛 + 嘴部线条。"""
+    """绘制一帧宠物占位图：圆形身体 + 两只眼睛 + 嘴部（线条或圆形）。
+
+    mouth_points: 嘴部线条的顶点序列（闭嘴/微笑等）。
+    mouth_circle: (中心坐标, 半径)，用于绘制张开的嘴（如进食动画）。
+    两者可二选一，均为 None 时不绘制嘴部。
+    """
     surface = pygame.Surface(FRAME_SIZE, pygame.SRCALPHA)
     cx, cy = CENTER
 
@@ -44,7 +50,13 @@ def _new_frame(
     pygame.draw.circle(surface, EYE_COLOR, (cx - 14, eye_y), 4)
     pygame.draw.circle(surface, EYE_COLOR, (cx + 14, eye_y), 4)
 
-    pygame.draw.lines(surface, EYE_COLOR, False, mouth_points, 3)
+    if mouth_points:
+        pygame.draw.lines(surface, EYE_COLOR, False, mouth_points, 3)
+
+    if mouth_circle:
+        center, radius = mouth_circle
+        pygame.draw.circle(surface, EYE_COLOR, center, radius)
+
     return surface
 
 
@@ -93,11 +105,60 @@ def _build_tired_frames() -> List[pygame.Surface]:
     ]
 
 
+def _build_interact_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    surprised_mouth = [(cx - 6, cy + 16), (cx + 6, cy + 16)]
+    color = (180, 255, 160)
+    return [
+        _new_frame(color, -4, surprised_mouth),
+        _new_frame(color, -6, surprised_mouth),
+    ]
+
+
+def _build_excited_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    grin = [(cx - 14, cy + 10), (cx, cy + 22), (cx + 14, cy + 10)]
+    color = (255, 120, 200)
+    return [
+        _new_frame(color, -6, grin),
+        _new_frame(color, 6, grin),
+        _new_frame(color, -6, grin),
+        _new_frame(color, 6, grin),
+    ]
+
+
+def _build_eating_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    color = (200, 150, 80)
+    closed_mouth = [(cx - 10, cy + 16), (cx + 10, cy + 16)]
+    return [
+        _new_frame(color, 0, closed_mouth),
+        _new_frame(color, 0, mouth_circle=((cx, cy + 16), 8)),
+        _new_frame(color, 0, closed_mouth),
+    ]
+
+
+def _build_playing_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    smile = [(cx - 14, cy + 12), (cx, cy + 22), (cx + 14, cy + 12)]
+    color = (170, 140, 255)
+    return [
+        _new_frame(color, 0, smile),
+        _new_frame(color, -8, smile),
+        _new_frame(color, 0, smile),
+        _new_frame(color, 8, smile),
+    ]
+
+
 ANIMATION_FRAME_BUILDERS = {
     "idle": _build_idle_frames,
     "happy": _build_happy_frames,
     "hungry": _build_hungry_frames,
     "tired": _build_tired_frames,
+    "interact": _build_interact_frames,
+    "excited": _build_excited_frames,
+    "eating": _build_eating_frames,
+    "playing": _build_playing_frames,
 }
 
 

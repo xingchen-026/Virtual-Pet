@@ -3,8 +3,12 @@
 负责 Pygame 的初始化、窗口创建、资源/动画/精灵/行为系统的组装，
 宠物数据的读取与保存，以及主循环的运行与退出控制。
 
-结构上为后续接入桌宠透明窗口、置顶显示、
-鼠标拖拽等功能预留空间。
+交互系统集成方式：
+
+    User Input -> InteractionManager -> BehaviorManager
+        -> Pet Attribute -> StateMachine -> AnimationManager
+
+结构上为后续接入桌宠透明窗口、置顶显示等功能预留空间。
 """
 
 import sys
@@ -12,8 +16,12 @@ import sys
 import pygame
 
 from config import settings
+from core.action import BehaviorManager
 from core.animation import Animation, AnimationManager, AnimationState
 from core.behavior import PetBehavior
+from core.event import InteractionEvent, InteractionEventType
+from core.feedback import FeedbackOverlay
+from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
 from core.sprite import PetSprite
@@ -23,6 +31,9 @@ from utils.helper import load_json, save_json
 DEBUG_TEXT_COLOR = (30, 30, 30)
 DEBUG_TEXT_POS = (10, 10)
 DEBUG_LINE_HEIGHT = 20
+
+# 交互提示文字起始绘制位置
+FEEDBACK_TEXT_POS = (10, 160)
 
 
 class Game:
@@ -46,7 +57,12 @@ class Game:
         self.behavior = PetBehavior(self.pet)
         self.pet_sprite = PetSprite(self.pet, self._build_animation_manager())
 
+        # 交互系统：用户输入 -> InteractionManager -> BehaviorManager
+        self.interaction_manager = InteractionManager(self.pet_sprite)
+        self.behavior_manager = BehaviorManager()
+
         self.debug_font = pygame.font.SysFont(None, 20)
+        self.feedback_overlay = FeedbackOverlay(self.debug_font)
 
     def _build_animation_manager(self) -> AnimationManager:
         """根据配置加载各动画状态的帧资源，构建 AnimationManager。"""
@@ -71,21 +87,48 @@ class Game:
         self._quit()
 
     def _handle_events(self):
-        """处理窗口事件，目前仅响应关闭窗口事件。"""
+        """处理窗口事件：关闭窗口，以及鼠标/键盘交互事件。"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+                continue
+
+            interaction_event = self.interaction_manager.handle_event(event)
+            if interaction_event is not None:
+                self._dispatch_interaction(interaction_event)
+
+    def _dispatch_interaction(self, interaction_event: InteractionEvent):
+        """将交互事件交给 BehaviorManager 处理，并应用其结果。
+
+        拖拽移动/结束属于位置更新，不经过 BehaviorManager；
+        其余事件统一走 BehaviorManager -> Pet Attribute -> 临时动画。
+        """
+        if interaction_event.type == InteractionEventType.DRAG_MOVE:
+            self.pet.set_position(*interaction_event.position)
+            return
+
+        if interaction_event.type == InteractionEventType.DRAG_END:
+            return
+
+        result = self.behavior_manager.handle(interaction_event, self.pet)
+        if result is None:
+            return
+
+        self.behavior.trigger_temporary_animation(result.animation, result.duration)
+        self.feedback_overlay.show(result.message)
 
     def _update(self, dt: float):
-        """逐帧更新逻辑：推进宠物行为（属性衰减/状态切换）与动画播放进度。"""
+        """逐帧更新逻辑：推进宠物行为（属性衰减/状态切换）、动画播放进度与交互提示。"""
         self.behavior.update(dt)
         self.pet_sprite.update(dt)
+        self.feedback_overlay.update(dt)
 
     def _render(self):
-        """渲染当前帧：填充背景、绘制宠物精灵与调试信息。"""
+        """渲染当前帧：填充背景、绘制宠物精灵、调试信息与交互提示。"""
         self.screen.fill((255, 255, 255))
         self.pet_sprite.draw(self.screen)
         self._render_debug_info()
+        self.feedback_overlay.draw(self.screen, FEEDBACK_TEXT_POS)
         pygame.display.flip()
 
     def _render_debug_info(self):
@@ -96,6 +139,8 @@ class Game:
             f"Hunger: {self.pet.hunger:.1f}",
             f"Mood: {self.pet.mood:.1f}",
             f"Energy: {self.pet.energy:.1f}",
+            f"Last action: {self.pet.last_action}",
+            f"Interactions: {self.pet.interaction_count}",
         ]
 
         x, y = DEBUG_TEXT_POS
