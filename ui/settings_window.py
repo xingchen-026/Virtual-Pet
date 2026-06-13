@@ -227,7 +227,7 @@ class SettingsWindow:
         y = self._draw_field_row(panel, y, "性格", "character", self.character)
         y = self._draw_field_row(panel, y, "语气", "tone", self.tone)
         y = self._draw_scale_row(panel, y)
-        y = self._draw_provider_row(panel, y)
+        y = self._draw_select_row(panel, y, "服务商", "provider", self.provider)
         y = self._draw_field_row(panel, y, "模型", "model", self.model)
         y = self._draw_field_row(panel, y, "API Key", "api_key", self._masked_key())
         self._draw_status_row(panel, y)
@@ -265,8 +265,11 @@ class SettingsWindow:
 
         return y + ROW_HEIGHT
 
-    def _draw_provider_row(self, panel: pygame.Surface, y: int) -> int:
-        label = self.font.render("服务商", True, theme.LABEL_COLOR)
+    def _draw_select_row(
+        self, panel: pygame.Surface, y: int, label_text: str, name: str, value: str
+    ) -> int:
+        """绘制「点击循环切换」型选择行（用于服务商 / 皮肤）。"""
+        label = self.font.render(label_text, True, theme.LABEL_COLOR)
         panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
 
         rect = pygame.Rect(
@@ -274,9 +277,12 @@ class SettingsWindow:
         )
         pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=4)
         pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
-        value = self.font.render(f"{self.provider} (点击切换)", True, theme.BUTTON_TEXT_COLOR)
-        panel.blit(value, value.get_rect(center=rect.center))
-        self._hit_areas["provider"] = rect
+        text = self.font.render(f"{value} (点击切换)", True, theme.BUTTON_TEXT_COLOR)
+        clip = panel.get_clip()
+        panel.set_clip(rect.inflate(-8, 0))
+        panel.blit(text, text.get_rect(midleft=(rect.x + 6, rect.centery)))
+        panel.set_clip(clip)
+        self._hit_areas[name] = rect
 
         return y + ROW_HEIGHT
 

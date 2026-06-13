@@ -28,7 +28,7 @@ TITLE_TEXT = "宠物状态"
 BUTTON_ROWS = [
     [("喂食", "feed"), ("玩耍", "play"), ("洗澡", "bath")],
     [("睡觉", "sleep"), ("礼物", "gift")],
-    [("聊天", "chat"), ("设置", "settings")],
+    [("皮肤", "skin"), ("聊天", "chat"), ("设置", "settings")],
 ]
 
 BUTTON_HEIGHT = 28

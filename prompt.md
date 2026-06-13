@@ -28,22 +28,21 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：设置界面把**性格与语气拆成两个独立字段**（personality.character / .tone，
-  分别注入系统提示词「你的性格：…」「你的说话语气：…」）。⚠️**事故修复**：上一轮冒烟测试
-  误调用设置保存写入空 api_key，把本地 `config/ai_config.json` 的真实 Key 覆盖清空了
-  （该文件 skip-worktree，不显示在 git status，恢复运行时数据时被漏掉）。Key 无法找回
-  （从未入库、无备份），需用户在设置里重新粘贴。已确立安全做法：冒烟前先 `cp ai_config.json` 备份、测后还原。
-- 在此之前（已提交 `bf820eb`）：统一宠物名称、设置改名、系统提示词优化、内容审查
-  （`core/ai/moderation.py` + `config/moderation.json` 双向过滤）。
-- 之前：聊天/设置窗口靠边停靠避免遮挡宠物；数值面板去掉年龄；「拖放道具」已被否决回退。
+- **最近一次完成**：**皮肤选择独立窗口**——皮肤从设置里移出，做成顶级弹窗
+  （右键面板「皮肤」按钮打开 `ui/skin_window.py`），用**缩略图预览**点击选择、即时切换、
+  当前皮肤高亮；右下角「创建皮肤」按钮为**占位**（点击仅提示"开发中"，实现搁置）。
+  `SkinManager.preview_path` 取代表帧；`Game._apply_skin` 重建动画即时生效。`tests/test_skin.py` 覆盖。
+- 已提交：皮肤切换（曾内联在设置，本次改为独立窗口，`0ee1bc4` 之后未提交）；性格/语气拆分（`0ee1bc4`）；
+  统一名称/设置改名/提示词优化/内容审查（`bf820eb`）。
+- 之前：聊天/设置窗口靠边停靠；数值面板去掉年龄；「拖放道具」已被否决回退。
+  ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
-  - 功能向：聊天历史持久化展示、SAD 等新状态专属动画、皮肤切换的图形化入口
-    （目前靠改 `config/skin_config.json` + 重启）。
+  - 功能向：聊天历史持久化展示（重启后载入最近对话）、SAD 等新状态专属动画。
   - 工程向：CI 跑 pytest、给 UIManager/AIService 补单测。
   - 小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
   - 美术：接入正式素材/Lottie 动画，替换占位帧。
-  - 注：「拖放道具」已被否决，不再列为候选。
+  - 注：「拖放道具」已被否决；「皮肤切换图形化」已完成，均不再列为候选。
 
 ---
 
@@ -57,7 +56,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 56 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 62 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -78,6 +77,10 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **皮肤选择独立窗口**：右键面板「皮肤」按钮打开 `ui/skin_window.py`，缩略图预览点击选择、
+  即时切换、当前皮肤高亮；右下角「创建皮肤」按钮为占位（实现搁置）。
+  `SkinManager.available_skins/set_active/preview_path`；`Game._apply_skin` 重建动画即时生效。
+  性格/语气已拆为两个独立字段（character/tone）。`tests/test_skin.py` 覆盖。
 - **名称统一 + 性格自定义 + 提示词优化 + 内容审查**：宠物名称在数值面板/聊天窗口统一；
   设置可改名称与性格语气（注入系统提示词）；系统提示词重写（拟真宠物/简短有情绪/健康友善）；
   新增 `core/ai/moderation.py`（违规词过滤，双向审查输入与回复，配置 `config/moderation.json`）。
@@ -123,8 +126,8 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 **模块职责速查**
 - `core/game.py`：主循环编排（事件/更新/渲染/帧率/托盘/自动存档/退出）。已瘦身。
 - `core/window_controller.py`：窗口跟随坐标换算与拖拽（坐标不变式集中于此）。
-- `ui/ui_manager.py`：聊天窗口/数值面板/设置窗口 + 事件路由 + AI 异步回传 + 属性变化(+xx)显示。
-- `ui/{chat_window,stats_panel,settings_window,message_box,theme}.py`：各 UI 组件 + 共享配色。
+- `ui/ui_manager.py`：聊天/数值面板/设置/皮肤窗口 + 事件路由 + AI 异步回传 + 属性变化(+xx)显示。
+- `ui/{chat_window,stats_panel,settings_window,skin_window,message_box,theme}.py`：各 UI 组件 + 共享配色。
 - `core/ai/*`：LLM 封装、人格、记忆、Prompt 拼接、情绪分析、AIService 入口。
 - `core/{pet,behavior,state_machine,autonomous,behavior_tree,movement,schedule,emotion}.py`：宠物与行为系统。
 - `core/{desktop,resource,sprite,animation,skin,interaction,action,event,food}.py`：平台/资源/渲染/交互。
@@ -139,7 +142,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 56 passed）
+python -m pytest tests/ -q            # 回归测试（当前 62 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

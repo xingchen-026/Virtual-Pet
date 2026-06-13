@@ -31,6 +31,7 @@ from core.ai.ai_service import AIService
 from core.event import InteractionEvent, InteractionEventType
 from ui.chat_window import ChatWindow
 from ui.settings_window import SettingsWindow
+from ui.skin_window import SkinWindow
 from ui.stats_panel import StatsPanel
 from utils.exception import AIServiceError, log_exception
 
@@ -72,6 +73,8 @@ class UIManager:
         window_size,
         on_interaction: Callable[[InteractionEvent], None],
         on_user_prefs_changed: Callable[[], None],
+        skin_manager=None,
+        on_skin_change: Callable[[str], None] = None,
     ) -> None:
         self.font = font
         self.pet = pet
@@ -80,8 +83,10 @@ class UIManager:
         self.ai_service = ai_service
         self.desktop_manager = desktop_manager
         self.ai_config = ai_config
+        self.skin_manager = skin_manager
         self._on_interaction = on_interaction
         self._on_user_prefs_changed = on_user_prefs_changed
+        self._on_skin_change = on_skin_change
 
         # 数值信息面板：右键点击宠物弹出/关闭
         self.stats_panel = StatsPanel(font)
@@ -98,6 +103,15 @@ class UIManager:
         )
         self.settings_window = SettingsWindow(font, settings_rect)
         self._ai_test_results: "queue.Queue[tuple]" = queue.Queue()
+
+        # 皮肤选择窗口：顶级弹窗，缩略图预览选择，靠右侧停靠、垂直居中
+        skin_rect = pygame.Rect(
+            window_size[0] - settings.SKIN_WINDOW_WIDTH - settings.CHAT_WINDOW_MARGIN,
+            (window_size[1] - settings.SKIN_WINDOW_HEIGHT) // 2,
+            settings.SKIN_WINDOW_WIDTH,
+            settings.SKIN_WINDOW_HEIGHT,
+        )
+        self.skin_window = SkinWindow(font, skin_rect)
 
         # AI 对话窗口：靠左侧停靠，避免遮挡居中的宠物。
         # UI 与 AIService 解耦，AI 回复在后台线程获取，经队列回传主循环。
@@ -122,13 +136,18 @@ class UIManager:
         return (
             self.chat_window.visible
             or self.settings_window.visible
+            or self.skin_window.visible
             or self.stats_panel.visible
         )
 
     @property
     def blocks_autonomous(self) -> bool:
-        """是否应暂停自主行为（聊天/设置窗口打开时窗口需保持静止）。"""
-        return self.chat_window.visible or self.settings_window.visible
+        """是否应暂停自主行为（聊天/设置/皮肤窗口打开时窗口需保持静止）。"""
+        return (
+            self.chat_window.visible
+            or self.settings_window.visible
+            or self.skin_window.visible
+        )
 
     # ----- 事件路由 -----
 
@@ -144,6 +163,14 @@ class UIManager:
                 result = self.settings_window.handle_event(event)
                 if result is not None:
                     self._handle_settings_result(result)
+            return True
+
+        # 皮肤选择窗口为模态：打开期间吞掉全部事件
+        if self.skin_window.visible:
+            if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                result = self.skin_window.handle_event(event)
+                if result is not None:
+                    self._handle_skin_result(result)
             return True
 
         # 聊天开关键（仅在聊天窗口关闭时响应）
@@ -197,6 +224,14 @@ class UIManager:
             self.stats_panel.hide()
             if self.chat_window.visible:
                 self.desktop_manager.focus()
+        elif action == "skin":
+            items = [
+                (name, self.skin_manager.preview_path(name))
+                for name in self.skin_manager.available_skins()
+            ]
+            self.skin_window.open(items, self.skin_manager.active_skin)
+            self.stats_panel.hide()
+            self.desktop_manager.focus()
         elif action == "settings":
             personality = self.ai_service.personality
             self.settings_window.open(
@@ -205,6 +240,20 @@ class UIManager:
             )
             self.stats_panel.hide()
             self.desktop_manager.focus()
+
+    # ----- 皮肤窗口结果 -----
+
+    def _handle_skin_result(self, result: tuple) -> None:
+        """处理皮肤选择窗口的结果：选择即时切换皮肤；创建按钮暂为占位。"""
+        action, value = result
+        if action == "select":
+            if self._on_skin_change is not None:
+                self._on_skin_change(value)
+            self.skin_window.set_active(value)
+        elif action == "create":
+            # 「创建皮肤」具体实现暂时搁置，仅给出占位提示
+            self.skin_window.set_status("（创建皮肤功能开发中）")
+        # ("close", None)：窗口已自行关闭，无需额外处理
 
     # ----- 设置窗口结果 -----
 
@@ -328,6 +377,7 @@ class UIManager:
         self.stats_panel.draw(screen, self.pet_sprite.rect, self._stats_lines())
         self.chat_window.draw(screen)
         self.settings_window.draw(screen)
+        self.skin_window.draw(screen)
 
     def _stats_lines(self) -> List[str]:
         """生成数值信息面板的内容（右键点击宠物弹出）。

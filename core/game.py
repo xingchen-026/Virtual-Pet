@@ -181,6 +181,8 @@ class Game:
             (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT),
             on_interaction=self._dispatch_interaction,
             on_user_prefs_changed=self._save_user_config,
+            skin_manager=self.skin_manager,
+            on_skin_change=self._apply_skin,
         )
 
         # 系统托盘：菜单回调在后台线程执行，仅将动作放入队列，主循环统一处理
@@ -210,6 +212,16 @@ class Game:
 
         default_state = AnimationState(settings.DEFAULT_ANIMATION_STATE)
         return AnimationManager(animations, default_state=default_state)
+
+    def _apply_skin(self, skin_name: str) -> None:
+        """切换皮肤并即时生效（无需重启）：持久化选择并重建动画管理器。"""
+        if skin_name == self.skin_manager.active_skin:
+            return
+
+        self.skin_manager.set_active(skin_name)
+        self.pet_sprite.animation_manager = self._build_animation_manager()
+        # 旧皮肤的镜像/缩放变换缓存按帧 id 缓存，换皮肤后失效，清空避免占用
+        self.pet_sprite._transform_cache.clear()
 
     def run(self):
         """启动主循环，直到用户关闭窗口或主动退出。
