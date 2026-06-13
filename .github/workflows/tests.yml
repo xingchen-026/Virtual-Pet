@@ -1,0 +1,27 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    env:
+      # pygame 在无显示环境用 dummy 驱动；测试不创建窗口/字体，仅需可导入
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        # 仅安装测试所需依赖（pywin32/pystray 为 Windows 桌面运行时依赖，
+        # 测试用例不导入，CI 无需安装）
+        run: |
+          python -m pip install --upgrade pip
+          pip install pygame Pillow numpy scipy pytest
+      - name: Run tests
+        run: python -m pytest tests/ -q

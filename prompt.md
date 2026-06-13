@@ -38,7 +38,10 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - 已提交：皮肤选择独立窗口（缩略图预览，`b4cb315`）；性格/语气拆分（`0ee1bc4`）；
   统一名称/设置改名/提示词优化/内容审查（`bf820eb`）。
 - ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
-- **聊天持久化 + 记忆分层 + 设置增强（最新）**：①聊天历史持久化——可见对话存
+- **最近一次完成**：加 **CI 自动跑 pytest**（`.github/workflows/tests.yml`）——push 到 main / 提 PR
+  时在 Linux + Python 3.12 上跑全部测试；CI 仅装 pygame/Pillow/numpy/scipy/pytest（不装
+  Windows 专用 pywin32/pystray，已验证测试不依赖它们）。
+- **聊天持久化 + 记忆分层 + 设置增强**：①聊天历史持久化——可见对话存
   `data/chat_history.json`（`settings.CHAT_HISTORY_*`），重启回填聊天窗口（UIManager 加载+
   `_record_chat`）；与 AI 记忆分离。②记忆分两层——短期=最近 3 轮（`SHORT_TERM_LIMIT=3`），
   长期=主人习惯摘要（AIService 每 3 轮用 LLM 总结 `_update_long_term_summary` +
@@ -61,7 +64,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
   - 功能向：SAD 等新状态专属动画。
-  - 工程向：CI 跑 pytest、给 UIManager/AIService 补单测。
+  - 工程向：给 UIManager/AIService 补单测（CI 已就绪）。
   - 小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
   - 美术：接入正式素材/Lottie 动画，替换占位帧。
   - 注：「拖放道具」已被否决；「皮肤切换图形化」已完成，均不再列为候选。
@@ -99,6 +102,9 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **CI**：`.github/workflows/tests.yml`——push main / PR 时 Linux+Py3.12 跑 pytest（仅装测试依赖）。
+- **聊天持久化 + 记忆分层 + 设置增强**：聊天历史存 `data/chat_history.json` 重启回填；
+  短期记忆=最近 3 轮、长期记忆=LLM 每 3 轮总结的主人习惯摘要；设置服务商下拉 + 自定义 base_url。
 - **皮肤制作**：`core/skin_builder.py`（精灵图逐帧切分 `slice_frames` + 多张图逐帧分配
   `grouped_from_sheets/build_from_sheets` + 按状态上传 + chroma_key 抠图 + mirror 镜像
   + 逐动画速度，写 skin.json；`preview_grouped` 内存出帧供预览；旧 build_from_spritesheet/CLI 保留）；

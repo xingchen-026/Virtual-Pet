@@ -165,12 +165,16 @@ VirtualPet/
 
 ## 运行测试
 
-核心逻辑（Pet 属性钳制、情绪分析、记忆系统、精灵图切分）的回归测试位于
-`tests/`，无需图形界面即可运行：
+核心逻辑（Pet 属性钳制、情绪分析、记忆系统、精灵图切分、皮肤构建、窗口坐标等）
+的回归测试位于 `tests/`，无需图形界面即可运行：
 
 ```
 python -m pytest tests/ -q
 ```
+
+每次推送到 `main` 或提 PR 时，GitHub Actions（`.github/workflows/tests.yml`）会在
+Linux + Python 3.12 上自动运行全部测试。CI 仅装测试所需依赖
+（pygame / Pillow / numpy / scipy / pytest），不装 Windows 专用的 pywin32 / pystray。
 
 ## 当前完成阶段
 
