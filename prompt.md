@@ -1,535 +1,134 @@
-## 角色
+# Virtual-Pet 项目状态文档
 
-你是一名资深 AI 应用架构工程师，同时具备 Python 桌面应用开发、LLM Agent 开发和 AI 辅助编程（Vibe Coding）实践经验。
-
-当前正在继续开发 Virtual-Pet 桌面虚拟宠物项目。
-
-此前阶段已经完成：
-
-* Python + Pygame 桌宠框架
-* Pet 核心对象系统
-* JSON 数据持久化
-* 动画管理系统
-* Sprite 渲染系统
-* 状态机系统
-* 饥饿 / 心情 / 体力养成系统
-* 鼠标拖拽交互
-* 喂食 / 玩耍行为系统
-* 自主行为系统
-* 随机漫游
-* 桌面透明窗口
-* 置顶显示
-* 系统托盘管理
-
-当前阶段目标：
-
-为桌宠增加 AI 能力。
-
-实现：
-
-* 用户与宠物自然语言交流
-* 宠物拥有固定人格
-* 对话影响宠物情绪
-* 形成长期记忆
-* 根据历史互动调整反馈
-
-开发原则：
-
-1. AI 模块必须与游戏核心逻辑解耦。
-2. LLM 调用必须独立封装。
-3. 支持未来替换不同模型供应商。
-4. 不允许直接在 Pet 类中调用大模型。
-5. 保持离线桌宠核心功能可运行。
-6. 每完成一个阶段等待确认，不提前开发后续功能。
-
-开发流程：
-
-需求分析 → Prompt拆解 → AI代码生成 → 人工审核 → 测试优化。
+> **本文件是项目的单一事实来源（Single Source of Truth）。**
+> 每次对话被压缩后，只需读取本文件即可了解：**当前在做什么、接下来做什么、已经完成了什么。**
+>
+> **维护约定（重要）**：每当完成一项工作、改变方向、或确定下一步时，**立即更新本文件**对应小节
+> （主要是「当前状态」与「已完成」两节）。这是项目的关键文件，必须主动、及时维护。
 
 ---
 
-# 开发任务
+## 一句话简介
 
-## 1. 创建 AI 服务层
-
-新增：
-
-```
-core/
-
-├── ai/
-│
-├── llm_client.py          # LLM接口封装
-├── prompt_manager.py      # Prompt管理
-├── memory.py              # 记忆系统
-└── personality.py         # 人格系统
-```
-
-设计：
-
-LLMClient 类。
-
-负责：
-
-* 模型请求
-* 参数管理
-* 返回结果处理
-
-接口：
-
-```python
-response = llm.chat(message)
-```
-
-要求：
-
-支持：
-
-* OpenAI API
-* DeepSeek API
-* 本地模型接口
-
-统一接口：
-
-```python
-class LLMClient:
-
-    def chat()
-```
-
-未来替换模型无需修改业务代码。
+基于 **Python 3.12 + Pygame 2.6** 的桌面虚拟宠物：透明无边框窗口悬浮桌面、自主漫游、
+喂食/玩耍互动、状态机养成（饥饿/心情/体力）、接入 LLM 的自然语言聊天与人格/记忆系统、
+可导入自定义皮肤。数据用 JSON 持久化。仅 Windows 提供完整桌面能力（pywin32），其他平台降级为普通窗口。
 
 ---
 
-# 2. 实现宠物人格系统
+## 当前状态（CURRENT）
 
-新增：
-
-PersonalityManager。
-
-定义宠物人格：
-
-例如：
-
-```json
-{
-"name":"Mimi",
-"personality":
-{
-"kindness":80,
-"humor":70,
-"curiosity":90
-}
-}
-```
-
-人格影响：
-
-* 回复语气
-* 行为选择
-* 情绪变化
-
-例如：
-
-高幽默：
-
-回复：
-
-"嘿嘿，你终于来看我啦~"
-
-高冷：
-
-回复：
-
-"哦，你来了。"
-
-要求：
-
-人格参数配置化。
+- **最近一次完成**：代码审查 12 项全部处理完毕。其中第 10 项（Game 类拆分）分两步落地——
+  抽出 `WindowController`（窗口跟随坐标）与 `UIManager`（三个界面窗口 + 事件路由 + 异步回传），
+  `game.py` 从 ~600 行降到 374 行。本次又把 prompt.md 改造为本状态文档。
+- **正在进行**：无（等待下一步指令）。
+- **下一步候选**（尚未开始，按需挑选）：
+  - 仍可继续的小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
+  - 功能向：聊天历史持久化展示、更多养成动作（洗澡/睡觉/礼物）、SAD 等新状态专属动画、
+    皮肤切换的图形化入口（目前靠改 `config/skin_config.json` + 重启）。
+  - 工程向：CI 跑 pytest、给 UIManager/AIService 补单测。
 
 ---
 
-# 3. 实现 Prompt 管理系统
+## 开发约定（必须遵守）
 
-新增：
-
-PromptManager。
-
-管理：
-
-## 系统提示词
-
-例如：
-
-```
-你是一只桌面虚拟宠物。
-
-你的名字是 Mimi。
-
-你需要表现出：
-
-1. 可爱
-2. 有情绪
-3. 会记住主人行为
-
-回复不要超过100字。
-```
+1. **AI 模块解耦**：`Pet -> AIService -> LLM`。禁止在 `core/pet.py` 直接调用 LLM。
+   所有 LLM 调用封装在 `core/ai/llm_client.py`，换供应商只改 `config/ai_config.json`。
+2. **离线可用**：AI 不可用（无 Key/网络异常/格式错误）时降级为离线回复，桌宠核心功能不受影响。
+3. **配置文件化**：模型名/参数/按键/尺寸等不硬编码，集中在 `config/settings.py` 与 `config/*.json`。
+4. **运行时数据不入库**：`data/pet_data.json`、`data/memory.json` 是用户运行产生的数据，提交时不要带上。
+5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
+   本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
+   `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 29 passed）。
+7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
+   只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
+8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
+   必要时 `python main.py` 实机启动确认。临时脚本会写 `data/memory.json`，测完还原。
 
 ---
 
-## 动态上下文
+## 已完成（DONE）
 
-自动拼接：
+### 基础阶段（1-7，见 README 详细说明）
+1. 工程骨架 + Pygame 主循环 + Pet 核心类 + JSON 持久化
+2. 动画系统（AnimationState/Animation/AnimationManager/PetSprite）
+3. 状态机（StateMachine）+ 属性衰减（PetBehavior）
+4. 交互系统（点击/拖拽/喂食/玩耍，事件->行为->属性->动画）
+5. 自主行为系统（AutonomousManager + 行为树 + 昼夜节奏 + 情绪 + 随机漫游）
+6. 桌面应用能力（透明置顶无边框窗口 / 系统托盘 / 统一异常与日志）
+7. AI 能力（LLMClient / PersonalityManager / MemoryManager / PromptManager /
+   EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
-包含：
+### 近期迭代
+- **右键数值面板 + 中文字体修复**：右键宠物弹出状态面板；UI 改用含中文字形的系统字体（微软雅黑等），修复方块乱码。
+- **皮肤替换系统**：`utils/spritesheet.py` 自动检测背景色+去背景+切分；`tools/import_skin.py`
+  支持行模式（每行一个动作）与网格模式（每格一个表情，`--grid 3x6`，自动剔除越界碎片）；
+  `core/skin.py` 按 `config/skin_config.json` 选皮肤，缺失状态回退内置动画。已内置 **cat 皮肤**（覆盖全部 12 个动画状态）。
+- **窗口跟随 + 镜像 + 右键功能菜单 + 设置窗口**：宠物固定窗口中心、移动整窗跟随；向左移动镜像翻转；
+  喂食/玩耍移入右键面板按钮（不再用 F/P 键）；设置窗口可调宠物大小（0.5x~2.0x）、配置 AI 服务商/模型/API Key
+  （支持 Ctrl+V 粘贴、首尾明文掩码、「测试」按钮后台验证连接）。
 
-* 当前宠物状态
-* 最近记忆
-* 用户输入
-* 人格参数
-
-形成完整 Prompt。
-
-结构：
-
-```
-System Prompt
-
-+
-
-Pet State
-
-+
-
-Memory
-
-+
-
-User Message
-```
+### 代码审查 12 项（全部完成）
+1-6（`9d8339f`）：聊天线程异常兜底、MemoryManager 加锁+长期记忆 100 条上限、宠物数据 60s 自动存档、
+新增 `requirements.txt`、三档帧率（隐藏 5 / 空闲 30 / 活跃 60 fps）。
+7-9/11-12（`82e660a`）：MessageBox 预渲染消息行、删死代码（feedback.py / ActionResult.message）、
+抽 `ui/theme.py` 统一配色、漫游内缩半窗口防出屏、窗口位置跨会话持久化、新增 `tests/`（pytest）。
+10（`6a47e73` + `ca05cee`）：抽 `WindowController` 与 `UIManager`，Game 瘦身为纯编排者。
 
 ---
 
-# 4. 实现宠物记忆系统
+## 关键架构与文件地图
 
-新增：
-
-MemoryManager。
-
-保存：
-
-## 短期记忆
-
-最近对话：
-
-```json
-[
-{
-"user":"你好",
-"pet":"你好呀"
-}
-]
+**核心数据流**
+```
+用户输入 -> UIManager.handle_event（界面优先消化）
+         -> 未消化 -> InteractionManager -> Game._dispatch_interaction
+         -> BehaviorManager -> Pet 属性 -> StateMachine -> AnimationManager
+自主行为：Pet 状态 -> AutonomousManager -> 行为决策 -> 移动/动画
+窗口跟随：WindowController 维护「窗口中心 = 宠物屏幕坐标」不变式
+AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回聊天窗口
 ```
 
-保存最近10轮。
+**模块职责速查**
+- `core/game.py`：主循环编排（事件/更新/渲染/帧率/托盘/自动存档/退出）。已瘦身。
+- `core/window_controller.py`：窗口跟随坐标换算与拖拽（坐标不变式集中于此）。
+- `ui/ui_manager.py`：聊天窗口/数值面板/设置窗口 + 事件路由 + AI 异步回传 + 属性变化(+xx)显示。
+- `ui/{chat_window,stats_panel,settings_window,message_box,theme}.py`：各 UI 组件 + 共享配色。
+- `core/ai/*`：LLM 封装、人格、记忆、Prompt 拼接、情绪分析、AIService 入口。
+- `core/{pet,behavior,state_machine,autonomous,behavior_tree,movement,schedule,emotion}.py`：宠物与行为系统。
+- `core/{desktop,resource,sprite,animation,skin,interaction,action,event,food}.py`：平台/资源/渲染/交互。
+- `config/*.json`：ai_config（AI）、behavior_config（自主行为）、desktop_config（窗口）、
+  skin_config（当前皮肤）、user_config（宠物大小/窗口位置）。
+- `tests/`：pytest 回归（Pet 钳制/序列化、情绪规则、记忆并发与上限、精灵图切分、窗口坐标不变式）。
 
 ---
 
-## 长期记忆
+## 运行与测试
 
-记录：
+```bash
+pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
+python main.py                        # 启动桌宠
+python -m pytest tests/ -q            # 回归测试（当前 29 passed）
 
-重要事件：
-
-例如：
-
-```json
-{
-"event":"用户第一次喂食",
-"time":"2026-06-12",
-"emotion":"happy"
-}
+# 导入皮肤（行模式 / 网格模式）
+python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk
+python tools/import_skin.py 表情图.png --name 皮肤名 --grid 3x6 --states excited,...,eating
 ```
+
+**操作**：右键宠物弹面板（喂食/玩耍/聊天/设置）；`C` 开关聊天；拖拽移动；自主漫游时窗口跟随。
+设置里填 API Key 后点「测试」验证再保存。
 
 ---
 
-要求：
-
-存储：
-
-JSON即可。
-
-结构：
-
-```
-data/
-
-├── memory.json
-
-├── personality.json
-```
-
----
-
-# 5. 实现 AI 对话窗口
-
-新增：
-
-```
-ui/
-
-├── chat_window.py
-└── message_box.py
-```
-
-实现：
-
-用户：
-
-输入文字
-
-例如：
-
-```
-今天开心吗？
-```
-
-宠物：
-
-返回：
-
-```
-当然开心啦，因为你来看我了！
-```
-
-要求：
-
-支持：
-
-* 输入框
-* 消息显示
-* 滚动历史记录
-
----
-
-# 6. 实现 AI 情绪联动
-
-AI 回复后：
-
-分析情绪。
-
-例如：
-
-用户：
-
-"你好可爱"
-
-触发：
-
-```
-mood +10
-```
-
-用户：
-
-"你真笨"
-
-触发：
-
-```
-mood -5
-```
-
-新增：
-
-EmotionAnalyzer。
-
-负责：
-
-文本 → 情绪变化
-
-初期方案：
-
-规则 + Prompt分析。
-
-不要强制依赖额外模型。
-
----
-
-# 7. AI 行为影响桌宠状态
-
-建立：
-
-AI模块
-
-↓
-
-行为系统
-
-↓
-
-状态机
-
-例如：
-
-用户：
-
-"你累了吗？"
-
-AI判断：
-
-疲劳
-
-执行：
-
-```
-energy -5
-
-animation=sleep
-```
-
----
-
-# 8. 增加 AI 配置系统
-
-新增：
-
-```
-config/
-
-ai_config.json
-```
-
-例如：
-
-```json
-{
-"provider":"deepseek",
-"model":"deepseek-chat",
-"temperature":0.7,
-"max_tokens":500
-}
-```
-
-要求：
-
-模型名称不能写死。
-
-支持用户修改。
-
----
-
-# 9. 增加异常处理
-
-处理：
-
-* API失败
-* 网络异常
-* 模型不可用
-* 返回格式错误
-
-要求：
-
-AI不可用时：
-
-桌宠仍可以正常运行。
-
----
-
-# 项目限制
-
-当前阶段禁止：
-
-* 自动训练模型
-* 微调LLM
-* 多Agent系统
-* 知识库RAG
-* 语音识别
-
-后续阶段再扩展。
-
----
-
-# 代码要求
-
-1. 遵循 Python PEP8。
-
-2. AI模块独立。
-
-禁止：
-
-```python
-pet.py
-
-直接调用:
-
-openai.chat()
-```
-
-必须：
-
-```
-Pet
-
-↓
-
-AIService
-
-↓
-
-LLM
-```
-
-3. 所有Prompt独立管理。
-
-4. 所有模型配置文件化。
-
-5. 添加类型提示。
-
----
-
-# 当前项目状态
-
-已经完成：
-
-✅ 桌宠核心系统
-
-✅ 游戏交互系统
-
-✅ 自动行为系统
-
-✅ 桌面应用能力
-
-当前阶段目标：
-
-加入AI智能能力。
-
-完成后项目应该具备：
-
-* 用户可以和宠物聊天
-* 宠物拥有固定人格
-* 宠物记住历史互动
-* 对话影响情绪
-* AI反馈影响行为
-
----
-
-请完成本阶段开发，并输出：
-
-1. 新增文件列表
-
-2. 修改文件列表
-
-3. AI系统整体架构图
-
-4. Prompt设计说明
-
-5. 每个文件完整代码
-
-6. AI对话测试案例
-
-7. 记忆系统测试结果
-
-8. 当前阶段完成总结
-
-完成后停止，等待下一阶段指令。
+## 操作备忘（踩过的坑，避免重复）
+
+- **中文乱码**根因不是文件编码（早已统一 UTF-8），而是 `pygame.font.SysFont(None,...)` 默认字体无中文字形 ——
+  必须用 `settings.UI_FONT_NAMES`（微软雅黑等）。
+- **API Key 401**：DeepSeek 平台 Key 只在创建时完整显示一次，列表里是截断版；复制截断版会 401。
+  设置窗口的错误行已透传服务端 `error.message`（含 Key 末 4 位）便于核对。
+- **窗口跟随不变式**：任何改动 `WindowController` 的地方都要保持「窗口中心 = 宠物屏幕坐标」，
+  否则会出现「拖完弹回原位」类 bug（已有 `tests/test_window_controller.py` 锁定）。
+- **皮肤网格切分**：均匀网格会把相邻格越界的精灵边缘切进来，`_remove_border_debris` 按「贴边且远小于主体」剔除；
+  zZ/星星/气泡等合法装饰不受影响（阈值 `_BORDER_DEBRIS_RATIO`）。
+- **PowerShell/Bash**：本机两种 shell 都可用；停止桌宠用 `Get-Process python | Stop-Process -Force`。
