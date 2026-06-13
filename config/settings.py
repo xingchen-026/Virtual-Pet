@@ -139,6 +139,22 @@ ANIMATION_FRAME_DURATIONS = {
 # 宠物默认动画状态
 DEFAULT_ANIMATION_STATE = "idle"
 
+# 动画状态的中文显示名（UI 展示用，内部仍用英文 key）
+STATE_DISPLAY_NAMES = {
+    "idle": "待机",
+    "happy": "开心",
+    "hungry": "饥饿",
+    "tired": "疲惫",
+    "interact": "互动",
+    "excited": "兴奋",
+    "eating": "进食",
+    "playing": "玩耍",
+    "walk": "行走",
+    "run": "奔跑",
+    "look_around": "张望",
+    "sleep": "睡觉",
+}
+
 # ----- 属性随时间变化配置 -----
 # 属性自然衰减的计时间隔（秒）。开发/测试阶段取较小值，
 # 正式发布时可调大（如 60）。

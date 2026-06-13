@@ -38,10 +38,15 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - 已提交：皮肤选择独立窗口（缩略图预览，`b4cb315`）；性格/语气拆分（`0ee1bc4`）；
   统一名称/设置改名/提示词优化/内容审查（`bf820eb`）。
 - ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
-- **多张精灵图 + 逐帧自由选状态**（最新）：精灵图模式改为「可添加多张精灵图，每张切成逐帧，
-  点击任意帧循环分配状态（同状态帧按顺序成动画），每张图单独镜像/抠图」——不再死板按行，
-  同一皮肤可由不同资源拼成。后端 `skin_builder.slice_frames/grouped_from_sheets/build_from_sheets`
-  （config `sheets=[{path,mirror,chroma_color,frame_states}]`）；创建窗口逐帧缩略图网格 + 标签。
+- **创建窗口交互优化（最新 4 项）**：①精灵图改为**先点中文状态标签、再左键点帧贴标签**
+  （右键点帧取消），状态名全中文（`settings.STATE_DISPLAY_NAMES`）。②实时播放加**状态选择**
+  （点中文 chip 指定播放哪个状态）+ **镜像预览**开关（开则先播朝右再播朝左，
+  `_mirror_phase`）。③播放速度改为预览下方的**拖拉条 + 数值框**（数值框用编辑缓冲
+  `_speed_text` 避免逐键钳制串改）。④（用户跳过第 3 项）。
+- **多张精灵图 + 逐帧自由选状态**：精灵图可添加多张（同一皮肤不同资源拼成），每张切逐帧，
+  任意帧分配状态（同状态帧按序成动画），每张单独翻转/抠图。后端
+  `skin_builder.slice_frames/grouped_from_sheets/build_from_sheets`
+  （config `sheets=[{path,mirror,chroma_color,frame_states}]`）。
 - **点图取色 + 实时预览 + 皮肤合集/补充**：①源图点击取透明色（`SkinCreator._sample_color`）+
   右侧实时播放（`preview_grouped` + `update(dt)`）。②皮肤选择窗口显示每皮肤缺失状态
   （`SkinManager.covered_states/missing_states`），非默认皮肤「补充动画」按状态补齐

@@ -117,7 +117,7 @@ class UIManager:
         self.skin_window = SkinWindow(font, skin_rect)
 
         # 创建皮肤窗口：内容较多，居中显示（创建为一次性模态任务，临时遮挡可接受）
-        creator_size = (480, 560)
+        creator_size = (500, 600)
         creator_rect = pygame.Rect(
             (window_size[0] - creator_size[0]) // 2,
             (window_size[1] - creator_size[1]) // 2,
