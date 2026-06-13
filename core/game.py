@@ -38,21 +38,22 @@ settings.TRANSPARENT_COLOR_KEY 后由 DesktopManager 设为透明色键，
 放入队列，由主循环在 _process_tray_actions() 中统一处理，
 避免跨线程操作 Pygame / 窗口对象。
 
-AI 对话集成方式：
+界面窗口（聊天 / 数值面板 / 设置）由 ui.ui_manager.UIManager 统一
+管理：界面相关事件由 UIManager 优先消化，未消化的事件再交给
+InteractionManager 产出宠物交互。聊天与连接测试在独立线程中调用
+AIService（避免阻塞主循环），结果经 queue.Queue 回传，由
+UIManager.update() 在主循环中写回界面。喂食/玩耍按钮经回调回到
+Game._dispatch_interaction 走完整交互管线：
 
     Pet -> AIService -> LLM
 
-ChatWindow 仅负责输入框/消息历史的渲染与按键解析；用户提交消息后，
-Game 在独立线程中调用 AIService.chat()（避免阻塞主循环/动画），
-结果通过 queue.Queue 回传，由 _process_ai_replies() 在主循环中
-统一写回 ChatWindow 与宠物记忆。AIService 内部根据
-EmotionAnalyzer 的分析结果调整 Pet 属性，并通过 PetBehavior
-触发对应的临时动画（如"你累了吗？" -> energy-5、播放 sleep 动画）。
+AIService 内部根据 EmotionAnalyzer 的分析结果调整 Pet 属性，
+并通过 PetBehavior 触发对应的临时动画
+（如"你累了吗？" -> energy-5、播放 sleep 动画）。
 """
 
 import queue
 import sys
-import threading
 
 import pygame
 
@@ -72,11 +73,8 @@ from core.resource import ResourceManager
 from core.skin import SkinManager
 from core.sprite import PetSprite
 from core.window_controller import WindowController
-from ui.chat_window import ChatWindow
-from ui.settings_window import SettingsWindow
-from ui.stats_panel import StatsPanel
+from ui.ui_manager import UIManager
 from utils.behavior_logger import BehaviorLogger
-from utils.exception import AIServiceError, log_exception
 from utils.helper import load_json, save_json
 from utils.tray import TrayIcon
 
@@ -87,9 +85,6 @@ INTERACTION_LOG_MESSAGES = {
     InteractionEventType.FEED: "User fed pet",
     InteractionEventType.PLAY: "User played with pet",
 }
-
-# 设置窗口尺寸（居中显示）
-SETTINGS_WINDOW_SIZE = (380, 310)
 
 
 class Game:
@@ -158,22 +153,8 @@ class Game:
         # 否则聊天窗口/面板中的中文会渲染为方块乱码
         self.ui_font = pygame.font.SysFont(settings.UI_FONT_NAMES, settings.UI_FONT_SIZE)
 
-        # 宠物数值信息面板：右键点击宠物弹出/关闭
-        self.stats_panel = StatsPanel(self.ui_font)
-
-        # 交互引起的属性变化（属性名 -> [变化量, 剩余显示时间]），
-        # 在数值面板对应行后以 +xx/-xx 形式短暂显示
-        self._attr_deltas: dict = {}
-
-        # 设置窗口（宠物大小读取自上面加载的 user_config）
+        # 宠物大小读取自上面加载的 user_config
         self.pet_sprite.scale = self.user_config.get("pet_scale", settings.PET_SCALE_DEFAULT)
-        settings_rect = pygame.Rect(
-            (settings.WINDOW_WIDTH - SETTINGS_WINDOW_SIZE[0]) // 2,
-            (settings.WINDOW_HEIGHT - SETTINGS_WINDOW_SIZE[1]) // 2,
-            *SETTINGS_WINDOW_SIZE,
-        )
-        self.settings_window = SettingsWindow(self.ui_font, settings_rect)
-        self._ai_test_results: "queue.Queue[tuple]" = queue.Queue()
 
         # 宠物数据自动存档计时器（settings.AUTOSAVE_INTERVAL 秒一次）
         self._autosave_timer = 0.0
@@ -185,15 +166,16 @@ class Game:
         self.memory = MemoryManager()
         self.ai_service = AIService(self.ai_config, self.personality, self.memory, self.behavior)
 
-        # AI 对话窗口：UI 与 AIService 解耦，AI 回复在后台线程获取，经队列回传主循环
-        chat_rect = pygame.Rect(
-            settings.CHAT_WINDOW_MARGIN,
-            settings.CHAT_WINDOW_MARGIN,
-            settings.WINDOW_WIDTH - 2 * settings.CHAT_WINDOW_MARGIN,
-            settings.CHAT_WINDOW_HEIGHT,
+        # 界面管理器：聊天窗口 / 数值面板 / 设置窗口及其事件路由与异步结果回传。
+        # 喂食/玩耍按钮经 on_interaction 回到交互分发管线；
+        # 保存设置后经 on_user_prefs_changed 让 Game 合并持久化用户偏好。
+        self.ui = UIManager(
+            self.ui_font, self.pet, self.pet_sprite, self.autonomous_manager,
+            self.ai_service, self.desktop_manager, self.ai_config,
+            (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT),
+            on_interaction=self._dispatch_interaction,
+            on_user_prefs_changed=self._save_user_config,
         )
-        self.chat_window = ChatWindow(self.ui_font, chat_rect, pet_name=self.personality.name)
-        self._ai_replies: "queue.Queue[str]" = queue.Queue()
 
         # 系统托盘：菜单回调在后台线程执行，仅将动作放入队列，主循环统一处理
         self._tray_actions: "queue.Queue[str]" = queue.Queue()
@@ -246,57 +228,24 @@ class Game:
 
         active = (
             self.interaction_manager.dragging
-            or self.chat_window.visible
-            or self.settings_window.visible
-            or self.stats_panel.visible
+            or self.ui.is_active
             or self.autonomous_manager.movement.has_target()
         )
         return settings.FPS if active else settings.IDLE_FPS
 
     def _handle_events(self):
-        """处理窗口事件：关闭窗口，AI 对话窗口输入，以及鼠标/键盘交互事件。
+        """处理窗口事件：关闭窗口、界面窗口输入，以及鼠标/键盘交互事件。
 
-        AI 对话窗口打开时，键盘事件（文本输入/退格/回车/Esc）与鼠标滚轮
-        事件由 ChatWindow 处理，不再转发给 InteractionManager，
-        避免输入聊天内容时触发喂食/玩耍等功能按键。
+        界面相关事件（设置窗口模态、聊天输入、面板按钮）由 UIManager
+        优先消化；未被消化的事件再交给 InteractionManager 产出交互事件，
+        避免输入聊天内容/点击面板按钮时误触发宠物交互。
         """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
                 continue
 
-            # 设置窗口为模态：打开期间所有输入事件均由其处理
-            if self.settings_window.visible:
-                if event.type in (
-                    pygame.KEYDOWN, pygame.TEXTINPUT, pygame.MOUSEBUTTONDOWN,
-                ):
-                    result = self.settings_window.handle_event(event)
-                    if result is not None:
-                        self._handle_settings_result(result)
-                continue
-
-            if event.type == pygame.KEYDOWN and not self.chat_window.visible:
-                if pygame.key.name(event.key) == settings.CHAT_TOGGLE_KEY:
-                    self.chat_window.toggle()
-                    self.desktop_manager.focus()
-                    continue
-
-            if self.chat_window.visible and event.type in (
-                pygame.KEYDOWN, pygame.TEXTINPUT, pygame.MOUSEWHEEL,
-            ):
-                message = self.chat_window.handle_event(event)
-                if message:
-                    self._send_chat_message(message)
-                continue
-
-            # 数值面板内的左键点击（功能按钮）优先于宠物交互处理，
-            # 避免面板覆盖宠物区域时点按钮被误判为点击/拖拽宠物
-            if (
-                event.type == pygame.MOUSEBUTTONDOWN
-                and event.button == 1
-                and self.stats_panel.contains(event.pos)
-            ):
-                self._handle_panel_action(self.stats_panel.handle_click(event.pos))
+            if self.ui.handle_event(event):
                 continue
 
             interaction_event = self.interaction_manager.handle_event(event)
@@ -310,7 +259,7 @@ class Game:
         其余事件统一走 BehaviorManager -> Pet Attribute -> 临时动画。
         """
         if interaction_event.type == InteractionEventType.STATS_TOGGLE:
-            self.stats_panel.toggle()
+            self.ui.toggle_stats_panel()
             return
 
         if interaction_event.type == InteractionEventType.DRAG_START:
@@ -336,7 +285,7 @@ class Game:
             return
 
         self.behavior.trigger_temporary_animation(result.animation, result.duration)
-        self._record_attr_deltas(before)
+        self.ui.record_attr_deltas(before)
 
         log_message = INTERACTION_LOG_MESSAGES.get(interaction_event.type)
         if log_message is not None:
@@ -344,121 +293,20 @@ class Game:
 
         self.ai_service.notify_interaction(self.pet, interaction_event.type.value)
 
-    def _handle_panel_action(self, action) -> None:
-        """分发数值面板功能按钮的动作（喂食 / 玩耍 / 聊天 / 设置）。"""
-        if action == "feed":
-            self._dispatch_interaction(InteractionEvent(type=InteractionEventType.FEED))
-        elif action == "play":
-            self._dispatch_interaction(InteractionEvent(type=InteractionEventType.PLAY))
-        elif action == "chat":
-            self.chat_window.toggle()
-            self.stats_panel.hide()
-            if self.chat_window.visible:
-                self.desktop_manager.focus()
-        elif action == "settings":
-            self.settings_window.open(self.pet_sprite.scale, self.ai_config)
-            self.stats_panel.hide()
-            self.desktop_manager.focus()
-
-    def _handle_settings_result(self, result: dict) -> None:
-        """应用设置窗口的保存/测试结果。"""
-        if result.get("action") == "test":
-            self._test_ai_config(result["ai_config"])
-            return
-
-        if result.get("action") == "save":
-            self.pet_sprite.scale = result["pet_scale"]
-            self.user_config["pet_scale"] = result["pet_scale"]
-            self._save_user_config()
-
-            self.ai_config.update(result["ai_config"])
-            save_json(settings.AI_CONFIG_FILE, self.ai_config)
-            self.ai_service.apply_config(self.ai_config)
-
-        # 设置窗口已关闭：聊天窗口未打开时停用文本输入
-        if not self.chat_window.visible:
-            pygame.key.stop_text_input()
-
-    def _test_ai_config(self, partial_config: dict) -> None:
-        """在后台线程中用设置窗口的当前编辑值测试 LLM 连接。"""
-        config = {**self.ai_config, **partial_config}
-        self.settings_window.set_status("正在测试连接...", None)
-
-        def worker() -> None:
-            self._ai_test_results.put(AIService.test_connection(config))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _process_ai_test_results(self) -> None:
-        """将后台线程的连接测试结果写回设置窗口状态行。"""
-        while not self._ai_test_results.empty():
-            ok, message = self._ai_test_results.get_nowait()
-            self.settings_window.set_status(message, ok)
-
-    def _record_attr_deltas(self, before: tuple) -> None:
-        """对比交互前后的属性值，记录非零变化量供数值面板显示。"""
-        for name, old_value, new_value in (
-            ("hunger", before[0], self.pet.hunger),
-            ("mood", before[1], self.pet.mood),
-            ("energy", before[2], self.pet.energy),
-        ):
-            delta = new_value - old_value
-            if delta:
-                self._attr_deltas[name] = [delta, settings.ATTR_DELTA_DURATION]
-
-    def _attr_delta_suffix(self, name: str) -> str:
-        """生成属性行的变化量后缀（如 " +20"），无变化时返回空字符串。"""
-        entry = self._attr_deltas.get(name)
-        if entry is None:
-            return ""
-        return f"  {entry[0]:+.0f}"
-
-    def _send_chat_message(self, message: str) -> None:
-        """提交用户输入的聊天消息：显示在对话窗口，并在后台线程调用 AIService。
-
-        LLM 请求可能耗时（网络延迟/超时），在独立线程中执行以避免
-        阻塞主循环（动画刷新、置顶维持、托盘响应等）。
-        """
-        self.chat_window.add_message("user", message)
-        self.chat_window.set_pending(True)
-
-        def worker() -> None:
-            # 兜底捕获所有异常：工作线程若意外死亡，回复永远不会入队，
-            # 聊天窗口将永久停留在"正在输入"状态（pending 无法复位）
-            try:
-                reply = self.ai_service.chat(self.pet, message)
-            except Exception as exc:
-                log_exception(AIServiceError(f"聊天处理出现意外异常: {exc}"))
-                reply = "（呜……我刚才走神了，再和我说一遍好吗？）"
-            self._ai_replies.put(reply)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _process_ai_replies(self) -> None:
-        """将后台线程中 AIService.chat() 返回的回复写回对话窗口。"""
-        while not self._ai_replies.empty():
-            reply = self._ai_replies.get_nowait()
-            self.chat_window.set_pending(False)
-            self.chat_window.add_message("pet", reply)
-
     def _update(self, dt: float):
-        """逐帧更新逻辑：处理托盘动作、AI 回复、宠物行为/自主行为决策/动画与交互提示。"""
+        """逐帧更新逻辑：处理托盘动作、界面异步结果、宠物行为/自主行为/动画。"""
         self._process_tray_actions()
-        self._process_ai_replies()
-        self._process_ai_test_results()
+        self.ui.update(dt)
 
         self.behavior.update(dt)
         # 拖拽中或聊天/设置窗口打开时暂停自主行为：
         # 窗口跟随模式下漫游会移动整个窗口，输入期间窗口必须保持静止
         interaction_active = (
-            self.interaction_manager.dragging
-            or self.chat_window.visible
-            or self.settings_window.visible
+            self.interaction_manager.dragging or self.ui.blocks_autonomous
         )
         self.autonomous_manager.update(dt, interaction_active)
         self.window.sync_to_pet()
         self.pet_sprite.update(dt)
-        self._update_attr_deltas(dt)
 
         self._refresh_topmost(dt)
         self._autosave(dt)
@@ -471,20 +319,15 @@ class Game:
             save_json(settings.PET_DATA_FILE, self.pet.to_dict())
 
     def _save_user_config(self) -> None:
-        """将用户偏好（宠物大小、当前窗口位置等）合并写回 user_config.json。"""
+        """将用户偏好（宠物大小、当前窗口位置等）合并写回 user_config.json。
+
+        从存活对象读取当前值（宠物大小取自精灵、窗口位置取自窗口控制器），
+        设置保存与退出时统一调用，保证两类偏好不会互相覆盖。
+        """
+        self.user_config["pet_scale"] = self.pet_sprite.scale
         if self.window.supported:
             self.user_config["window_position"] = list(self.window.window_pos)
         save_json(settings.USER_CONFIG_FILE, self.user_config)
-
-    def _update_attr_deltas(self, dt: float) -> None:
-        """推进属性变化提示的剩余显示时间，移除已过期的条目。"""
-        expired = []
-        for name, entry in self._attr_deltas.items():
-            entry[1] -= dt
-            if entry[1] <= 0:
-                expired.append(name)
-        for name in expired:
-            del self._attr_deltas[name]
 
     def _process_tray_actions(self):
         """处理系统托盘菜单产生的动作（显示/隐藏/保存/退出）。"""
@@ -511,7 +354,7 @@ class Game:
             self.desktop_manager.keep_on_top()
 
     def _render(self):
-        """渲染当前帧：填充背景（透明色键或白色）、绘制宠物精灵、数值面板与交互提示。"""
+        """渲染当前帧：填充背景（透明色键或白色）、绘制宠物精灵与界面窗口。"""
         if self.desktop_manager.supported and self.desktop_config.get("transparent", False):
             background_color = settings.TRANSPARENT_COLOR_KEY
         else:
@@ -519,30 +362,8 @@ class Game:
 
         self.screen.fill(background_color)
         self.pet_sprite.draw(self.screen)
-        self.stats_panel.draw(self.screen, self.pet_sprite.rect, self._stats_lines())
-        self.chat_window.draw(self.screen)
-        self.settings_window.draw(self.screen)
+        self.ui.draw(self.screen)
         pygame.display.flip()
-
-    def _stats_lines(self):
-        """生成数值信息面板的内容（右键点击宠物弹出）。
-
-        喂食/玩耍等交互引起的属性变化以 +xx/-xx 后缀短暂显示在
-        对应属性行后（见 _record_attr_deltas / _attr_delta_suffix）。
-        """
-        return [
-            f"名称: {self.pet.name}  年龄: {self.pet.age}",
-            f"状态: {self.pet.current_state.name}",
-            f"饥饿: {self.pet.hunger:.1f}{self._attr_delta_suffix('hunger')}",
-            f"心情: {self.pet.mood:.1f}{self._attr_delta_suffix('mood')}",
-            f"体力: {self.pet.energy:.1f}{self._attr_delta_suffix('energy')}",
-            f"最近动作: {self.pet.last_action or '无'}",
-            f"互动次数: {self.pet.interaction_count}",
-            f"行为: {self.autonomous_manager.current_behavior.name}",
-            f"情绪: {self.autonomous_manager.emotion.name}",
-            f"时间: {self.autonomous_manager.schedule.time_of_day()}"
-            f" (第 {self.autonomous_manager.schedule.day_count} 天)",
-        ]
 
     def _quit(self):
         """停止系统托盘、保存宠物数据与用户偏好并安全退出 Pygame 与程序。"""
