@@ -40,6 +40,25 @@ SETTINGS_WINDOW_SIZE = (380, 310)
 # 聊天工作线程意外异常时回传给用户的兜底回复
 _CHAT_FALLBACK_REPLY = "（呜……我刚才走神了，再和我说一遍好吗？）"
 
+# 非面板触发的内部交互事件（点击/拖拽/面板开关），不作为面板按钮动作
+_NON_PANEL_EVENTS = {
+    InteractionEventType.CLICK,
+    InteractionEventType.EXCITED,
+    InteractionEventType.DRAG_START,
+    InteractionEventType.DRAG_MOVE,
+    InteractionEventType.DRAG_END,
+    InteractionEventType.STATS_TOGGLE,
+}
+
+# 数值面板可触发的养成动作：按钮标识 -> 事件类型，由枚举自动派生。
+# 新增养成动作只要在 InteractionEventType 增加成员（值即按钮标识），
+# 即自动可被面板分发，本映射与 _handle_panel_action 无需改动。
+_PANEL_INTERACTION_TYPES = {
+    event_type.value: event_type
+    for event_type in InteractionEventType
+    if event_type not in _NON_PANEL_EVENTS
+}
+
 
 class UIManager:
     """桌宠界面窗口与界面相关交互的统一管理器。"""
@@ -162,12 +181,19 @@ class UIManager:
     # ----- 面板按钮动作 -----
 
     def _handle_panel_action(self, action) -> None:
-        """分发数值面板功能按钮的动作（喂食 / 玩耍 / 聊天 / 设置）。"""
-        if action == "feed":
-            self._on_interaction(InteractionEvent(type=InteractionEventType.FEED))
-        elif action == "play":
-            self._on_interaction(InteractionEvent(type=InteractionEventType.PLAY))
-        elif action == "chat":
+        """分发数值面板功能按钮的动作。
+
+        养成动作（feed/play/bath/sleep/gift 等，按钮标识与
+        InteractionEventType 的值一致）统一经 on_interaction 回调走
+        Game 的交互管线；chat/settings 为界面动作，在此直接处理。
+        新增养成按钮无需改动本方法。
+        """
+        event_type = _PANEL_INTERACTION_TYPES.get(action)
+        if event_type is not None:
+            self._on_interaction(InteractionEvent(type=event_type))
+            return
+
+        if action == "chat":
             self.chat_window.toggle()
             self.stats_panel.hide()
             if self.chat_window.visible:

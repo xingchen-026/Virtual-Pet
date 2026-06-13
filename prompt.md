@@ -28,16 +28,17 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：把 prompt.md 改造为本状态文档，并保留「角色 / 任务清单 / 约束 / 已完成」四个板块
-  （角色板块在前一次改造中被遗漏，已补回）。上一轮完成代码审查 12 项——其中第 10 项（Game 类拆分）
-  分两步落地：抽出 `WindowController`（窗口跟随坐标）与 `UIManager`（三个界面窗口 + 事件路由 + 异步回传），
-  `game.py` 从 ~600 行降到 374 行。
+- **最近一次完成**：扩展养成系统——新增洗澡/睡觉/送礼三个养成动作（`core/action.py`
+  BathAction/SleepAction/GiftAction，复用 happy/sleep/excited 动画），全部接入右键面板按钮
+  （喂食/玩耍/洗澡/睡觉/礼物）。UIManager 面板路由改为「按钮标识 ↔ InteractionEventType」
+  通用映射（`_PANEL_INTERACTION_TYPES` 由枚举自动派生），以后加养成动作零改动路由。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
-  - 仍可继续的小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
-  - 功能向：聊天历史持久化展示、更多养成动作（洗澡/睡觉/礼物）、SAD 等新状态专属动画、
-    皮肤切换的图形化入口（目前靠改 `config/skin_config.json` + 重启）。
+  - **拖放道具**交互入口（把食物/玩具/礼物图标拖到宠物身上）——养成动作的另一种图形化入口，尚未做。
+  - 功能向：聊天历史持久化展示、SAD 等新状态专属动画、皮肤切换的图形化入口
+    （目前靠改 `config/skin_config.json` + 重启）。
   - 工程向：CI 跑 pytest、给 UIManager/AIService 补单测。
+  - 小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
 
 ---
 
@@ -51,7 +52,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 29 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 36 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -72,6 +73,9 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **养成动作扩展**：在喂食/玩耍基础上新增洗澡（mood+15/energy-5）、睡觉（energy+40/mood+5）、
+  送礼（mood+30）三个养成动作，全部接入右键面板按钮；面板路由按事件类型通用分发，
+  新增动作四步即可（枚举 + Action + 注册 + 按钮）。`tests/test_action.py` 覆盖。
 - **右键数值面板 + 中文字体修复**：右键宠物弹出状态面板；UI 改用含中文字形的系统字体（微软雅黑等），修复方块乱码。
 - **皮肤替换系统**：`utils/spritesheet.py` 自动检测背景色+去背景+切分；`tools/import_skin.py`
   支持行模式（每行一个动作）与网格模式（每格一个表情，`--grid 3x6`，自动剔除越界碎片）；
@@ -120,15 +124,15 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 29 passed）
+python -m pytest tests/ -q            # 回归测试（当前 36 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk
 python tools/import_skin.py 表情图.png --name 皮肤名 --grid 3x6 --states excited,...,eating
 ```
 
-**操作**：右键宠物弹面板（喂食/玩耍/聊天/设置）；`C` 开关聊天；拖拽移动；自主漫游时窗口跟随。
-设置里填 API Key 后点「测试」验证再保存。
+**操作**：右键宠物弹面板（养成动作：喂食/玩耍/洗澡/睡觉/礼物 + 聊天/设置）；
+`C` 开关聊天；拖拽移动；自主漫游时窗口跟随。设置里填 API Key 后点「测试」验证再保存。
 
 ---
 

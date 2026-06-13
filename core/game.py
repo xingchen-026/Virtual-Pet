@@ -84,6 +84,9 @@ INTERACTION_LOG_MESSAGES = {
     InteractionEventType.EXCITED: "User excited pet with repeated clicks",
     InteractionEventType.FEED: "User fed pet",
     InteractionEventType.PLAY: "User played with pet",
+    InteractionEventType.BATH: "User bathed pet",
+    InteractionEventType.SLEEP: "User put pet to sleep",
+    InteractionEventType.GIFT: "User gave pet a gift",
 }
 
 

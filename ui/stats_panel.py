@@ -22,9 +22,12 @@ from ui import theme
 
 TITLE_TEXT = "宠物状态"
 
-# 功能按钮：按行排列的 (显示文字, 动作标识)，动作由 Game 分发
+# 功能按钮：按行排列的 (显示文字, 动作标识)，动作由 UIManager 分发。
+# 养成动作（feed/play/bath/sleep/gift）的动作标识与 InteractionEventType
+# 的值一致，UIManager 据此通用分发；chat/settings 为界面动作。
 BUTTON_ROWS = [
-    [("喂食", "feed"), ("玩耍", "play")],
+    [("喂食", "feed"), ("玩耍", "play"), ("洗澡", "bath")],
+    [("睡觉", "sleep"), ("礼物", "gift")],
     [("聊天", "chat"), ("设置", "settings")],
 ]
 

@@ -10,11 +10,12 @@ Action 不直接操作 AnimationManager 或 StateMachine：
 临时动画的播放与恢复由 core.behavior.PetBehavior 统一处理。
 
 BehaviorManager 负责将 InteractionEvent 分发给对应的 Action，
-统一管理 Click / Excited / Drag(Touch) / Feed / Play 等行为。
+统一管理 Click / Excited / Drag(Touch) / Feed / Play / Bath / Sleep / Gift 等行为。
 
-未来新增行为（例如 BathAction、SleepAction、GiftAction）时，
-只需新增一个 Action 子类并在 BehaviorManager 中注册即可，
-不需要改动事件系统或行为分发逻辑。
+新增养成动作的扩展点（以已实现的 Bath/Sleep/Gift 为范例）：
+新增一个 Action 子类、在 BehaviorManager._actions 注册对应
+InteractionEventType、并在数值面板增加按钮即可；UIManager 的面板
+按钮按事件类型通用分发，行为分发逻辑无需改动。
 """
 
 from __future__ import annotations
@@ -105,11 +106,49 @@ class PlayAction(Action):
         return ActionResult(animation="playing", duration=1.5)
 
 
+class BathAction(Action):
+    """洗澡：洗干净心情提升，过程略消耗体力，复用 happy 动画。"""
+
+    MOOD_GAIN = 15
+    ENERGY_COST = 5
+
+    def execute(self, pet: Pet) -> ActionResult:
+        pet.increase_mood(self.MOOD_GAIN)
+        pet.decrease_energy(self.ENERGY_COST)
+        return ActionResult(animation="happy", duration=1.5)
+
+
+class SleepAction(Action):
+    """睡觉：大幅恢复体力，心情略升，复用 sleep 动画（时长较长）。"""
+
+    ENERGY_GAIN = 40
+    MOOD_GAIN = 5
+
+    def execute(self, pet: Pet) -> ActionResult:
+        pet.increase_energy(self.ENERGY_GAIN)
+        pet.increase_mood(self.MOOD_GAIN)
+        return ActionResult(animation="sleep", duration=3.0)
+
+
+class GiftAction(Action):
+    """送礼物：心情大幅提升，复用 excited 动画。"""
+
+    MOOD_GAIN = 30
+
+    def execute(self, pet: Pet) -> ActionResult:
+        pet.increase_mood(self.MOOD_GAIN)
+        return ActionResult(animation="excited", duration=1.5)
+
+
 class BehaviorManager:
-    """行为管理器：统一管理 Feed / Play / Click / Drag 等交互行为。
+    """行为管理器：统一管理 Feed / Play / Bath / Sleep / Gift / Click / Drag 等行为。
 
     根据 InteractionEvent.type 分发到对应的 Action 执行，
     并记录最近一次行为，供数据持久化使用。
+
+    扩展养成动作只需：在 core.event.InteractionEventType 增加事件类型、
+    新增 Action 子类、在此 _actions 注册、并在数值面板增加按钮，
+    UIManager 的面板路由按事件类型通用分发，无需改动。
     """
 
     def __init__(self) -> None:
@@ -119,6 +158,9 @@ class BehaviorManager:
             InteractionEventType.DRAG_START: TouchAction(),
             InteractionEventType.FEED: FeedAction(),
             InteractionEventType.PLAY: PlayAction(),
+            InteractionEventType.BATH: BathAction(),
+            InteractionEventType.SLEEP: SleepAction(),
+            InteractionEventType.GIFT: GiftAction(),
         }
 
     def handle(self, event: InteractionEvent, pet: Pet) -> Optional[ActionResult]:
