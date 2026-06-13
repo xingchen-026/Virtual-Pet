@@ -10,9 +10,14 @@ Action 不直接操作 AnimationManager 或 StateMachine：
 临时动画的播放与恢复由 core.behavior.PetBehavior 统一处理。
 
 BehaviorManager 负责将 InteractionEvent 分发给对应的 Action，
-统一管理 Click / Excited / Drag(Touch) / Feed / Play / Bath / Sleep / Gift 等行为。
+统一管理 Click / Excited / Drag(Touch) / Feed / Play / Bath / Gift 等
+「一次性」行为（执行即产生属性变化与临时动画）。
 
-新增养成动作的扩展点（以已实现的 Bath/Sleep/Gift 为范例）：
+注：睡觉（SLEEP）是「持续模式」而非一次性行为——点击后停在原地、
+随时间缓慢恢复体力，由 core.behavior.PetBehavior 的睡眠模式实现，
+在 Game._dispatch_interaction 中拦截处理，不经过 BehaviorManager。
+
+新增一次性养成动作的扩展点（以 Bath/Gift 为范例）：
 新增一个 Action 子类、在 BehaviorManager._actions 注册对应
 InteractionEventType、并在数值面板增加按钮即可；UIManager 的面板
 按钮按事件类型通用分发，行为分发逻辑无需改动。
@@ -118,18 +123,6 @@ class BathAction(Action):
         return ActionResult(animation="happy", duration=1.5)
 
 
-class SleepAction(Action):
-    """睡觉：大幅恢复体力，心情略升，复用 sleep 动画（时长较长）。"""
-
-    ENERGY_GAIN = 40
-    MOOD_GAIN = 5
-
-    def execute(self, pet: Pet) -> ActionResult:
-        pet.increase_energy(self.ENERGY_GAIN)
-        pet.increase_mood(self.MOOD_GAIN)
-        return ActionResult(animation="sleep", duration=3.0)
-
-
 class GiftAction(Action):
     """送礼物：心情大幅提升，复用 excited 动画。"""
 
@@ -159,7 +152,6 @@ class BehaviorManager:
             InteractionEventType.FEED: FeedAction(),
             InteractionEventType.PLAY: PlayAction(),
             InteractionEventType.BATH: BathAction(),
-            InteractionEventType.SLEEP: SleepAction(),
             InteractionEventType.GIFT: GiftAction(),
         }
 

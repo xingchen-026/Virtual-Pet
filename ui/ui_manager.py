@@ -319,19 +319,15 @@ class UIManager:
     def _stats_lines(self) -> List[str]:
         """生成数值信息面板的内容（右键点击宠物弹出）。
 
-        喂食/玩耍等交互引起的属性变化以 +xx/-xx 后缀短暂显示在
-        对应属性行后（见 record_attr_deltas / _attr_delta_suffix）。
+        只展示名称/年龄、各属性数值与时间；行为、情绪、最近动作等
+        通过宠物动画直接呈现，不再以文字罗列。喂食/玩耍等交互引起的
+        属性变化以 +xx/-xx 后缀短暂显示（见 record_attr_deltas）。
         """
         return [
             f"名称: {self.pet.name}  年龄: {self.pet.age}",
-            f"状态: {self.pet.current_state.name}",
             f"饥饿: {self.pet.hunger:.1f}{self._attr_delta_suffix('hunger')}",
             f"心情: {self.pet.mood:.1f}{self._attr_delta_suffix('mood')}",
             f"体力: {self.pet.energy:.1f}{self._attr_delta_suffix('energy')}",
-            f"最近动作: {self.pet.last_action or '无'}",
-            f"互动次数: {self.pet.interaction_count}",
-            f"行为: {self.autonomous_manager.current_behavior.name}",
-            f"情绪: {self.autonomous_manager.emotion.name}",
             f"时间: {self.autonomous_manager.schedule.time_of_day()}"
             f" (第 {self.autonomous_manager.schedule.day_count} 天)",
         ]

@@ -41,14 +41,50 @@ class PetBehavior:
         # 计时结束后自动恢复为 pet.current_state 对应的动画。
         self._temp_animation_timer = 0.0
 
+        # 睡眠模式：点击「睡觉」后停在原地、持续播放 sleep 动画、
+        # 按时间缓慢恢复体力，体力回满或被交互打断后醒来。
+        self._sleeping = False
+
         # 启动时按 pet.current_state（可能来自存档）同步一次动画
         self._sync_animation()
 
+    @property
+    def is_sleeping(self) -> bool:
+        """当前是否处于睡眠模式（供 Game 暂停自主漫游、保持窗口静止）。"""
+        return self._sleeping
+
+    @property
+    def is_critical(self) -> bool:
+        """是否处于危急状态（饥饿或体力归零）。
+
+        供 Game 暂停自主漫游，使宠物停在原地、持续显示饥饿/疲劳动画。
+        """
+        threshold = settings.CRITICAL_ATTRIBUTE_THRESHOLD
+        return self.pet.hunger <= threshold or self.pet.energy <= threshold
+
+    def start_sleep(self) -> None:
+        """进入睡眠模式：切换为 sleep 动画并清除临时动画计时。"""
+        self._sleeping = True
+        self._temp_animation_timer = 0.0
+        self._elapsed = 0.0
+        self.pet.change_animation("sleep")
+
+    def stop_sleep(self) -> None:
+        """退出睡眠模式，恢复为当前状态对应的动画。"""
+        if not self._sleeping:
+            return
+        self._sleeping = False
+        self._sync_animation()
+
     def update(self, dt: float) -> None:
-        """累计时间，每达到一个 tick 间隔执行一次属性衰减与状态刷新。
+        """累计时间，每达到一个 tick 间隔执行一次属性变化与状态刷新。
 
         dt: 距离上一次更新的时间间隔（秒）。
         """
+        if self._sleeping:
+            self._update_sleep(dt)
+            return
+
         if self._temp_animation_timer > 0:
             self._temp_animation_timer -= dt
             if self._temp_animation_timer <= 0:
@@ -60,6 +96,27 @@ class PetBehavior:
         while self._elapsed >= settings.ATTRIBUTE_DECAY_INTERVAL:
             self._elapsed -= settings.ATTRIBUTE_DECAY_INTERVAL
             self._tick()
+
+        # 危急状态（饥饿/体力归零）：持续强制显示状态动画，
+        # 避免被暂停前残留的漫游动画（walk/run）盖住，给出明确反馈。
+        if self.is_critical and self._temp_animation_timer <= 0:
+            self._sync_animation()
+
+    def _update_sleep(self, dt: float) -> None:
+        """睡眠模式逐帧更新：保持 sleep 动画，按 tick 缓慢恢复体力。
+
+        体力恢复到上限后自动醒来。睡眠期间饥饿仍缓慢下降。
+        """
+        self.pet.change_animation("sleep")
+
+        self._elapsed += dt
+        while self._elapsed >= settings.ATTRIBUTE_DECAY_INTERVAL:
+            self._elapsed -= settings.ATTRIBUTE_DECAY_INTERVAL
+            self.pet.increase_energy(settings.SLEEP_ENERGY_RECOVER_PER_TICK)
+            self.pet.decrease_hunger(settings.HUNGER_DECAY_PER_TICK)
+
+        if self.pet.energy >= settings.ATTRIBUTE_MAX:
+            self.stop_sleep()
 
     def trigger_temporary_animation(self, animation: str, duration: float) -> None:
         """播放一段交互行为触发的临时动画（如 happy / eating / playing）。

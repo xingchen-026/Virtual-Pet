@@ -259,11 +259,24 @@ class Game:
         """将交互事件交给 BehaviorManager 处理，并应用其结果。
 
         拖拽开始/移动/结束属于位置更新，不经过 BehaviorManager；
-        其余事件统一走 BehaviorManager -> Pet Attribute -> 临时动画。
+        睡觉是持续模式，单独拦截；查看面板不唤醒；其余交互会唤醒
+        正在睡觉的宠物，再统一走 BehaviorManager -> Pet Attribute -> 临时动画。
         """
         if interaction_event.type == InteractionEventType.STATS_TOGGLE:
             self.ui.toggle_stats_panel()
             return
+
+        # 睡觉：进入持续睡眠模式（停在原地、随时间缓慢回体力），
+        # 不走一次性行为管线
+        if interaction_event.type == InteractionEventType.SLEEP:
+            self.behavior.start_sleep()
+            self.pet.record_interaction(interaction_event.type.value)
+            self.behavior_logger.log(INTERACTION_LOG_MESSAGES[InteractionEventType.SLEEP])
+            return
+
+        # 其余任何交互（点击/拖拽/喂食/玩耍/洗澡/送礼）都唤醒睡觉中的宠物
+        if self.behavior.is_sleeping:
+            self.behavior.stop_sleep()
 
         if interaction_event.type == InteractionEventType.DRAG_START:
             self.window.begin_drag()
@@ -302,10 +315,13 @@ class Game:
         self.ui.update(dt)
 
         self.behavior.update(dt)
-        # 拖拽中或聊天/设置窗口打开时暂停自主行为：
-        # 窗口跟随模式下漫游会移动整个窗口，输入期间窗口必须保持静止
+        # 以下情况暂停自主行为（宠物停在原地，窗口保持静止）：
+        # 拖拽中、聊天/设置窗口打开、睡眠模式、危急状态（饥饿/体力归零）。
         interaction_active = (
-            self.interaction_manager.dragging or self.ui.blocks_autonomous
+            self.interaction_manager.dragging
+            or self.ui.blocks_autonomous
+            or self.behavior.is_sleeping
+            or self.behavior.is_critical
         )
         self.autonomous_manager.update(dt, interaction_active)
         self.window.sync_to_pet()

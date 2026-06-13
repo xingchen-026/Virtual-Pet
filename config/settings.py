@@ -148,6 +148,14 @@ ENERGY_DECAY_PER_TICK = 1
 # 非开心状态下，每个间隔内心情值的衰减量
 MOOD_DECAY_PER_TICK = 0.2
 
+# 睡眠模式下每个间隔内体力的恢复量（点击「睡觉」后停在原地缓慢回体力，
+# 数值大于自然衰减，体力回满后自动醒来）
+SLEEP_ENERGY_RECOVER_PER_TICK = 5
+
+# 危急阈值：饥饿或体力低至此值（含）时进入危急状态——停止自主漫游，
+# 持续显示饥饿/疲劳动画，给出明确的视觉反馈
+CRITICAL_ATTRIBUTE_THRESHOLD = 0
+
 # ----- 交互配置 -----
 # 连续点击触发 excited 状态：window 秒内点击次数达到 threshold 即触发
 EXCITED_CLICK_WINDOW = 1.0

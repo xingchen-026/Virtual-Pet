@@ -28,10 +28,12 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：扩展养成系统——新增洗澡/睡觉/送礼三个养成动作（`core/action.py`
-  BathAction/SleepAction/GiftAction，复用 happy/sleep/excited 动画），全部接入右键面板按钮
-  （喂食/玩耍/洗澡/睡觉/礼物）。UIManager 面板路由改为「按钮标识 ↔ InteractionEventType」
-  通用映射（`_PANEL_INTERACTION_TYPES` 由枚举自动派生），以后加养成动作零改动路由。
+- **最近一次完成**：按用户反馈修复四点——①睡觉改为**持续睡眠模式**（PetBehavior.start_sleep/
+  _update_sleep：停在原地、按 tick 缓慢回体力 SLEEP_ENERGY_RECOVER_PER_TICK，回满或被交互唤醒；
+  不再瞬间加体力，不再边睡边走）；②新增**危急状态**（饥饿/体力归零时 is_critical 暂停自主漫游、
+  强制显示 hungry/tired 动画，给出明确反馈）；③数值面板去掉互动次数/最近动作/行为/情绪四行
+  （这些通过动画呈现），只留名称年龄/饥饿/心情/体力/时间；④SLEEP 由 Game._dispatch_interaction
+  拦截，不再是一次性 Action（已删 SleepAction）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
   - **拖放道具**交互入口（把食物/玩具/礼物图标拖到宠物身上）——养成动作的另一种图形化入口，尚未做。
@@ -52,7 +54,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 36 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 43 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -73,9 +75,12 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
-- **养成动作扩展**：在喂食/玩耍基础上新增洗澡（mood+15/energy-5）、睡觉（energy+40/mood+5）、
-  送礼（mood+30）三个养成动作，全部接入右键面板按钮；面板路由按事件类型通用分发，
-  新增动作四步即可（枚举 + Action + 注册 + 按钮）。`tests/test_action.py` 覆盖。
+- **睡眠模式 + 危急状态 + 面板精简**（用户反馈修复）：睡觉=持续模式（停原地缓慢回体力、
+  可被唤醒，`core/behavior.py`）；饥饿/体力归零进入危急状态（停下并强制 hungry/tired 动画）；
+  数值面板移除互动次数/最近动作/行为/情绪（改由动画呈现）。`tests/test_behavior.py` 覆盖。
+- **养成动作扩展**：在喂食/玩耍基础上新增洗澡（mood+15/energy-5）、送礼（mood+30）等养成动作
+  （睡觉改为持续模式，见上），全部接入右键面板按钮；面板路由按事件类型通用分发，
+  新增一次性动作四步即可（枚举 + Action + 注册 + 按钮）。`tests/test_action.py` 覆盖。
 - **右键数值面板 + 中文字体修复**：右键宠物弹出状态面板；UI 改用含中文字形的系统字体（微软雅黑等），修复方块乱码。
 - **皮肤替换系统**：`utils/spritesheet.py` 自动检测背景色+去背景+切分；`tools/import_skin.py`
   支持行模式（每行一个动作）与网格模式（每格一个表情，`--grid 3x6`，自动剔除越界碎片）；
@@ -124,7 +129,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 36 passed）
+python -m pytest tests/ -q            # 回归测试（当前 43 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

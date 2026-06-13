@@ -10,7 +10,6 @@ from core.action import (
     FeedAction,
     GiftAction,
     PlayAction,
-    SleepAction,
 )
 from core.event import InteractionEvent, InteractionEventType
 from core.pet import Pet
@@ -32,14 +31,6 @@ def test_bath_raises_mood_costs_energy():
     assert result.animation == "happy"
 
 
-def test_sleep_restores_energy():
-    pet = _pet(energy=30, mood=50)
-    result = SleepAction().execute(pet)
-    assert pet.energy == 30 + SleepAction.ENERGY_GAIN
-    assert pet.mood == 50 + SleepAction.MOOD_GAIN
-    assert result.animation == "sleep"
-
-
 def test_gift_big_mood_boost():
     pet = _pet(mood=40)
     result = GiftAction().execute(pet)
@@ -47,17 +38,10 @@ def test_gift_big_mood_boost():
     assert result.animation == "excited"
 
 
-def test_sleep_energy_clamped_at_max():
-    pet = _pet(energy=90)
-    SleepAction().execute(pet)
-    assert pet.energy == 100  # 40 增益被钳制在 ATTRIBUTE_MAX
-
-
 def test_behavior_manager_dispatches_new_actions():
     manager = BehaviorManager()
     for event_type in (
         InteractionEventType.BATH,
-        InteractionEventType.SLEEP,
         InteractionEventType.GIFT,
     ):
         pet = _pet()
@@ -65,6 +49,13 @@ def test_behavior_manager_dispatches_new_actions():
         assert result is not None
         assert pet.last_action == event_type.value
         assert pet.interaction_count == 1
+
+
+def test_sleep_is_not_a_behavior_manager_action():
+    # 睡觉是持续模式，由 PetBehavior 处理，不在一次性行为管线中
+    pet = _pet()
+    result = BehaviorManager().handle(InteractionEvent(type=InteractionEventType.SLEEP), pet)
+    assert result is None
 
 
 def test_feed_play_still_work():
