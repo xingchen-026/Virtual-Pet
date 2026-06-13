@@ -183,6 +183,7 @@ class Game:
             on_user_prefs_changed=self._save_user_config,
             skin_manager=self.skin_manager,
             on_skin_change=self._apply_skin,
+            on_skin_create=self.create_skin,
         )
 
         # 系统托盘：菜单回调在后台线程执行，仅将动作放入队列，主循环统一处理
@@ -201,12 +202,16 @@ class Game:
         皮肤未覆盖的状态回退到内置动画目录。
         """
         animations = {}
+        skin_durations = self.skin_manager.frame_durations()
         for state in AnimationState:
             folder = (
                 self.skin_manager.animation_dir(state.value)
                 or settings.ANIMATION_FOLDERS[state.value]
             )
-            frame_duration = settings.ANIMATION_FRAME_DURATIONS[state.value]
+            # 优先使用皮肤自定义的播放速度，否则用内置默认速度
+            frame_duration = skin_durations.get(
+                state.value, settings.ANIMATION_FRAME_DURATIONS[state.value]
+            )
             frames = self.resource_manager.load_animation(folder)
             animations[state] = Animation(frames, frame_duration=frame_duration)
 
@@ -222,6 +227,55 @@ class Game:
         self.pet_sprite.animation_manager = self._build_animation_manager()
         # 旧皮肤的镜像/缩放变换缓存按帧 id 缓存，换皮肤后失效，清空避免占用
         self.pet_sprite._transform_cache.clear()
+
+    def _reload_skin(self, skin_name: str) -> None:
+        """强制重载皮肤（用于新建/重建皮肤后）：清资源缓存并重建动画。
+
+        与 _apply_skin 不同，本方法不做"已是当前皮肤就跳过"的优化，
+        且清空 ResourceManager 的动画缓存，确保读到磁盘上的新帧。
+        """
+        self.resource_manager._animation_cache.clear()
+        self.skin_manager.set_active(skin_name)
+        self.pet_sprite.animation_manager = self._build_animation_manager()
+        self.pet_sprite._transform_cache.clear()
+
+    def create_skin(self, config: dict):
+        """根据创建皮肤窗口的配置构建皮肤并即时启用，返回 (成功, 提示文案)。"""
+        from core import skin_builder
+
+        name = (config.get("name") or "").strip()
+        if not name:
+            return False, "请先填写皮肤名称"
+
+        try:
+            if config["mode"] == "sheet":
+                sheets = [s for s in config.get("sheets", []) if s.get("path")]
+                if not sheets:
+                    return False, "请先添加精灵图"
+                if not any(
+                    st and st not in skin_builder.SKIP_TOKENS
+                    for s in sheets for st in (s.get("frame_states") or [])
+                ):
+                    return False, "请为至少一帧指定动画状态"
+                skin_builder.build_from_sheets(
+                    name, sheets, frame_durations=config.get("speeds")
+                )
+            else:
+                state_paths = {s: [p] for s, p in config.get("state_paths", {}).items() if p}
+                if not state_paths:
+                    return False, "请至少为一个状态选择图片"
+                skin_builder.build_from_state_images(
+                    name, state_paths,
+                    chroma_color=config.get("chroma_color"),
+                    mirror=config.get("mirror", False),
+                    frame_durations=config.get("speeds"),
+                )
+        except Exception as exc:
+            log_exception(AIServiceError(f"创建皮肤失败: {exc}"))
+            return False, f"创建失败：{exc}"
+
+        self._reload_skin(name)
+        return True, f"皮肤「{name}」已创建并启用"
 
     def run(self):
         """启动主循环，直到用户关闭窗口或主动退出。

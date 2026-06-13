@@ -31,6 +31,17 @@ class SkinManager:
         config = load_json(self._config_path) or {}
         self.active_skin: str = config.get("active_skin", DEFAULT_SKIN)
 
+    def frame_durations(self) -> dict:
+        """返回当前皮肤的每动画播放速度覆盖（state -> 秒/帧）。
+
+        从 assets/skins/<皮肤>/skin.json 的 frame_durations 读取；
+        默认皮肤或未配置时返回空字典（Game 回退到 settings 的默认速度）。
+        """
+        if self.is_default:
+            return {}
+        manifest = load_json(os.path.join(settings.SKINS_DIR, self.active_skin, "skin.json")) or {}
+        return manifest.get("frame_durations", {})
+
     @property
     def is_default(self) -> bool:
         """当前是否使用内置默认皮肤。"""
@@ -52,6 +63,31 @@ class SkinManager:
         """切换当前皮肤并写回 config/skin_config.json。"""
         self.active_skin = skin_name
         save_json(self._config_path, {"active_skin": skin_name})
+
+    def covered_states(self, skin_name: str) -> List[str]:
+        """返回某皮肤已覆盖的动画状态（按 ANIMATION 顺序）。
+
+        默认皮肤视为覆盖全部内置状态；其它皮肤读 skin.json 的 states，
+        无 skin.json 时回退到扫描目录。
+        """
+        all_states = list(settings.ANIMATION_FOLDERS.keys())
+        if skin_name == DEFAULT_SKIN:
+            return list(all_states)
+
+        skin_dir = os.path.join(settings.SKINS_DIR, skin_name)
+        manifest = load_json(os.path.join(skin_dir, "skin.json")) or {}
+        states = set(manifest.get("states", {}).keys())
+        if not states and os.path.isdir(skin_dir):
+            states = {
+                name for name in os.listdir(skin_dir)
+                if os.path.isdir(os.path.join(skin_dir, name))
+            }
+        return [s for s in all_states if s in states]
+
+    def missing_states(self, skin_name: str) -> List[str]:
+        """返回某皮肤尚缺、会回退到内置动画的状态（按 ANIMATION 顺序）。"""
+        covered = set(self.covered_states(skin_name))
+        return [s for s in settings.ANIMATION_FOLDERS.keys() if s not in covered]
 
     def preview_path(self, skin_name: str) -> Optional[str]:
         """返回某皮肤的代表帧路径（用于皮肤选择窗口的缩略图预览）。

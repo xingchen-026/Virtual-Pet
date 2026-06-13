@@ -178,9 +178,9 @@ CHAT_WINDOW_HEIGHT = 420
 SETTINGS_WINDOW_WIDTH = 280
 SETTINGS_WINDOW_HEIGHT = 440
 
-# 皮肤选择窗口尺寸（靠右侧停靠，垂直居中；缩略图预览选择）
+# 皮肤选择窗口尺寸（靠右侧停靠，垂直居中；缩略图预览选择 + 缺失状态提示）
 SKIN_WINDOW_WIDTH = 300
-SKIN_WINDOW_HEIGHT = 360
+SKIN_WINDOW_HEIGHT = 400
 
 # AI 情绪联动触发的临时动画播放时长（秒）
 AI_EFFECT_ANIMATION_DURATION = 2.0

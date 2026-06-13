@@ -33,6 +33,7 @@ PLACEHOLDER_COLOR = (225, 225, 225)
 
 TITLE_TEXT = "选择皮肤 (Esc 关闭)"
 CREATE_TEXT = "创建皮肤"
+SUPPLEMENT_TEXT = "补充动画"
 
 
 class SkinWindow:
@@ -50,13 +51,18 @@ class SkinWindow:
         # [(命中矩形(窗口坐标), 皮肤名)]
         self._thumb_hit: List[Tuple[pygame.Rect, str]] = []
         self._create_hit: Optional[pygame.Rect] = None
+        self._supplement_hit: Optional[pygame.Rect] = None
+        # {皮肤名: [缺失状态]}，用于提示该皮肤差哪些动画
+        self._missing_map: dict = {}
 
-    def open(self, items: List[Tuple[str, Optional[str]]], active_skin: str) -> None:
-        """打开窗口。items 为 [(皮肤名, 代表帧路径或 None)]。"""
+    def open(self, items, active_skin: str, missing_map: dict = None) -> None:
+        """打开窗口。items 为 [(皮肤名, 代表帧路径或 None)]；
+        missing_map 为 {皮肤名: [缺失状态]}，用于显示各皮肤缺哪些动画。"""
         self.visible = True
         self.active_skin = active_skin
         self.status = ""
         self._items = [(name, self._load_thumb(path)) for name, path in items]
+        self._missing_map = missing_map or {}
 
     def close(self) -> None:
         self.visible = False
@@ -86,6 +92,8 @@ class SkinWindow:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._create_hit is not None and self._create_hit.collidepoint(event.pos):
                 return ("create", None)
+            if self._supplement_hit is not None and self._supplement_hit.collidepoint(event.pos):
+                return ("supplement", self.active_skin)
             for rect, name in self._thumb_hit:
                 if rect.collidepoint(event.pos):
                     return ("select", name)
@@ -116,11 +124,13 @@ class SkinWindow:
             cell_y = grid_top + row * CELL_H
             self._draw_cell(panel, cell_x, cell_y, name, thumb)
 
-        self._draw_create_button(panel)
+        self._draw_coverage(panel)
+        self._draw_bottom_buttons(panel)
 
         if self.status:
             status = self.font.render(self.status, True, theme.STATUS_PENDING_COLOR)
-            panel.blit(status, (PADDING, self.rect.height - PADDING - status.get_height()))
+            panel.blit(status, (PADDING, self.rect.height - PADDING - BUTTON_HEIGHT - 22
+                                - status.get_height()))
 
         surface.blit(panel, self.rect.topleft)
 
@@ -144,16 +154,43 @@ class SkinWindow:
         # 记录命中区域（窗口坐标 = 面板坐标 + 窗口左上角）
         self._thumb_hit.append((thumb_rect.move(self.rect.x, self.rect.y), name))
 
-    def _draw_create_button(self, panel) -> None:
-        width, height = CREATE_BUTTON_SIZE
-        rect = pygame.Rect(
-            self.rect.width - PADDING - width,
-            self.rect.height - PADDING - height,
-            width, height,
-        )
-        pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=6)
-        pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=6)
-        text = self.font.render(CREATE_TEXT, True, theme.BUTTON_TEXT_COLOR)
-        panel.blit(text, text.get_rect(center=rect.center))
+    def _draw_coverage(self, panel) -> None:
+        """显示当前皮肤缺哪些状态动画（提示可补充）。"""
+        y = self.rect.height - PADDING - CREATE_BUTTON_SIZE[1] - 22
+        missing = self._missing_map.get(self.active_skin, [])
+        if self.active_skin == "default":
+            text, color = "内置皮肤，覆盖全部动画状态", theme.STATUS_OK_COLOR
+        elif not missing:
+            text, color = f"「{self.active_skin}」已覆盖全部状态 ✓", theme.STATUS_OK_COLOR
+        else:
+            text, color = f"「{self.active_skin}」缺少 {len(missing)} 项：{' '.join(missing)}", theme.STATUS_FAIL_COLOR
+        glyph = self.font.render(self._clip(text, self.rect.width - 2 * PADDING), True, color)
+        panel.blit(glyph, (PADDING, y))
 
-        self._create_hit = rect.move(self.rect.x, self.rect.y)
+    def _clip(self, text: str, max_width: int) -> str:
+        if self.font.size(text)[0] <= max_width:
+            return text
+        while text and self.font.size(text + "…")[0] > max_width:
+            text = text[:-1]
+        return text + "…"
+
+    def _draw_bottom_buttons(self, panel) -> None:
+        width, height = CREATE_BUTTON_SIZE
+        y = self.rect.height - PADDING - height
+
+        create = pygame.Rect(self.rect.width - PADDING - width, y, width, height)
+        pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, create, border_radius=6)
+        pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, create, 1, border_radius=6)
+        panel.blit(self.font.render(CREATE_TEXT, True, theme.BUTTON_TEXT_COLOR),
+                   self.font.render(CREATE_TEXT, True, theme.BUTTON_TEXT_COLOR).get_rect(center=create.center))
+        self._create_hit = create.move(self.rect.x, self.rect.y)
+
+        # 「补充动画」仅对非默认、且有缺失状态的皮肤显示
+        self._supplement_hit = None
+        if self.active_skin != "default" and self._missing_map.get(self.active_skin):
+            supp = pygame.Rect(create.x - width - 8, y, width, height)
+            pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, supp, border_radius=6)
+            pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, supp, 1, border_radius=6)
+            panel.blit(self.font.render(SUPPLEMENT_TEXT, True, theme.BUTTON_TEXT_COLOR),
+                       self.font.render(SUPPLEMENT_TEXT, True, theme.BUTTON_TEXT_COLOR).get_rect(center=supp.center))
+            self._supplement_hit = supp.move(self.rect.x, self.rect.y)

@@ -56,3 +56,25 @@ def test_preview_path_returns_existing_frame():
 
 def test_preview_path_none_for_unknown_skin():
     assert SkinManager().preview_path("__nonexistent__") is None
+
+
+def test_default_covers_all_states():
+    from config import settings as cfg
+    sm = SkinManager()
+    assert sm.covered_states("default") == list(cfg.ANIMATION_FOLDERS.keys())
+    assert sm.missing_states("default") == []
+
+
+def test_partial_skin_coverage_and_missing(tmp_path, monkeypatch):
+    from config import settings as cfg
+    import json
+    skins = tmp_path / "skins"
+    (skins / "partial").mkdir(parents=True)
+    json.dump({"name": "partial", "states": {"idle": 3, "happy": 2}},
+              open(skins / "partial" / "skin.json", "w", encoding="utf-8"))
+    monkeypatch.setattr(cfg, "SKINS_DIR", str(skins))
+
+    sm = SkinManager(str(tmp_path / "skin_config.json"))
+    assert sm.covered_states("partial") == ["idle", "happy"]
+    missing = sm.missing_states("partial")
+    assert "idle" not in missing and "tired" in missing

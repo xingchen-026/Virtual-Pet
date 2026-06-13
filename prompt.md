@@ -28,14 +28,24 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：**皮肤选择独立窗口**——皮肤从设置里移出，做成顶级弹窗
-  （右键面板「皮肤」按钮打开 `ui/skin_window.py`），用**缩略图预览**点击选择、即时切换、
-  当前皮肤高亮；右下角「创建皮肤」按钮为**占位**（点击仅提示"开发中"，实现搁置）。
-  `SkinManager.preview_path` 取代表帧；`Game._apply_skin` 重建动画即时生效。`tests/test_skin.py` 覆盖。
-- 已提交：皮肤切换（曾内联在设置，本次改为独立窗口，`0ee1bc4` 之后未提交）；性格/语气拆分（`0ee1bc4`）；
+- **最近一次完成**：**皮肤制作功能**（「创建皮肤」按钮落地）——新增构建引擎
+  `core/skin_builder.py`（精灵图按行/网格切分 + 按状态上传 + 一键抠图 chroma_key
+  + 一键镜像 + 逐动画速度 frame_durations，写入 skin.json）与 GUI `ui/skin_creator.py`
+  （tkinter 选文件/选色，见 `utils/dialogs.py`）。皮肤窗口「创建皮肤」改为打开创建器，
+  生成后经 `Game.create_skin -> _reload_skin` 即时启用。`SkinManager.frame_durations`
+  + `Game._build_animation_manager` 支持逐皮肤播放速度。CLI `import_skin.py` 复用引擎。
+  `tests/test_skin_builder.py` 覆盖。
+- 已提交：皮肤选择独立窗口（缩略图预览，`b4cb315`）；性格/语气拆分（`0ee1bc4`）；
   统一名称/设置改名/提示词优化/内容审查（`bf820eb`）。
-- 之前：聊天/设置窗口靠边停靠；数值面板去掉年龄；「拖放道具」已被否决回退。
-  ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
+- ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
+- **多张精灵图 + 逐帧自由选状态**（最新）：精灵图模式改为「可添加多张精灵图，每张切成逐帧，
+  点击任意帧循环分配状态（同状态帧按顺序成动画），每张图单独镜像/抠图」——不再死板按行，
+  同一皮肤可由不同资源拼成。后端 `skin_builder.slice_frames/grouped_from_sheets/build_from_sheets`
+  （config `sheets=[{path,mirror,chroma_color,frame_states}]`）；创建窗口逐帧缩略图网格 + 标签。
+- **点图取色 + 实时预览 + 皮肤合集/补充**：①源图点击取透明色（`SkinCreator._sample_color`）+
+  右侧实时播放（`preview_grouped` + `update(dt)`）。②皮肤选择窗口显示每皮肤缺失状态
+  （`SkinManager.covered_states/missing_states`），非默认皮肤「补充动画」按状态补齐
+  （`build_from_state_images` 合并保留已有）。抠图：自动取角落 / tkinter 选色 / 点源图取色（精灵图模式作用于聚焦图）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
   - 功能向：聊天历史持久化展示（重启后载入最近对话）、SAD 等新状态专属动画。
@@ -56,7 +66,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 62 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 75 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -77,8 +87,16 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **皮肤制作**：`core/skin_builder.py`（精灵图逐帧切分 `slice_frames` + 多张图逐帧分配
+  `grouped_from_sheets/build_from_sheets` + 按状态上传 + chroma_key 抠图 + mirror 镜像
+  + 逐动画速度，写 skin.json；`preview_grouped` 内存出帧供预览；旧 build_from_spritesheet/CLI 保留）；
+  GUI `ui/skin_creator.py`（tkinter 选文件/选色 `utils/dialogs.py`；多张精灵图、逐帧缩略图点选状态、
+  点源图取色、右侧实时播放 `update(dt)`）；`Game.create_skin/_reload_skin` 生成即时启用；
+  逐皮肤播放速度经 `SkinManager.frame_durations` + `Game._build_animation_manager` 生效。
+  皮肤选择窗口显示缺失状态并可「补充动画」（`SkinManager.covered_states/missing_states`）。
+  `tests/test_skin_builder.py`、`tests/test_skin.py` 覆盖。
 - **皮肤选择独立窗口**：右键面板「皮肤」按钮打开 `ui/skin_window.py`，缩略图预览点击选择、
-  即时切换、当前皮肤高亮；右下角「创建皮肤」按钮为占位（实现搁置）。
+  即时切换、当前皮肤高亮，右下角「创建皮肤」打开创建器。
   `SkinManager.available_skins/set_active/preview_path`；`Game._apply_skin` 重建动画即时生效。
   性格/语气已拆为两个独立字段（character/tone）。`tests/test_skin.py` 覆盖。
 - **名称统一 + 性格自定义 + 提示词优化 + 内容审查**：宠物名称在数值面板/聊天窗口统一；
@@ -127,7 +145,8 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 - `core/game.py`：主循环编排（事件/更新/渲染/帧率/托盘/自动存档/退出）。已瘦身。
 - `core/window_controller.py`：窗口跟随坐标换算与拖拽（坐标不变式集中于此）。
 - `ui/ui_manager.py`：聊天/数值面板/设置/皮肤窗口 + 事件路由 + AI 异步回传 + 属性变化(+xx)显示。
-- `ui/{chat_window,stats_panel,settings_window,skin_window,message_box,theme}.py`：各 UI 组件 + 共享配色。
+- `ui/{chat_window,stats_panel,settings_window,skin_window,skin_creator,message_box,theme}.py`：各 UI 组件 + 共享配色。
+- `core/skin_builder.py`：皮肤构建引擎（切分/抠图/镜像/速度，写 skin.json）；`utils/dialogs.py`：tkinter 文件/颜色对话框。
 - `core/ai/*`：LLM 封装、人格、记忆、Prompt 拼接、情绪分析、AIService 入口。
 - `core/{pet,behavior,state_machine,autonomous,behavior_tree,movement,schedule,emotion}.py`：宠物与行为系统。
 - `core/{desktop,resource,sprite,animation,skin,interaction,action,event,food}.py`：平台/资源/渲染/交互。
@@ -142,7 +161,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 62 passed）
+python -m pytest tests/ -q            # 回归测试（当前 75 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

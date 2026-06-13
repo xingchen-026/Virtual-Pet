@@ -164,27 +164,12 @@ def collect_grid_mode(
 
 
 def write_skin(skin_dir: str, grouped: Dict[str, List[Image.Image]], source: str) -> None:
-    """将各状态帧写入皮肤目录（涉及的状态清空重写），并合并更新 skin.json。"""
-    manifest_path = os.path.join(skin_dir, "skin.json")
-    manifest = load_json(manifest_path) or {"name": os.path.basename(skin_dir), "states": {}}
-    manifest.setdefault("states", {})
-    manifest["source"] = source
+    """将各状态帧写入皮肤目录并更新 skin.json（复用 core.skin_builder.write_skin）。"""
+    from core.skin_builder import write_skin as _write_skin
 
-    for state, frames in grouped.items():
-        state_dir = os.path.join(skin_dir, state)
-        os.makedirs(state_dir, exist_ok=True)
-
-        for name in os.listdir(state_dir):
-            if name.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
-                os.remove(os.path.join(state_dir, name))
-
-        for index, frame in enumerate(frames):
-            frame.save(os.path.join(state_dir, f"frame_{index:02d}.png"))
-
-        manifest["states"][state] = len(frames)
-        print(f"  {state}: {len(frames)} 帧 -> {state_dir}")
-
-    save_json(manifest_path, manifest)
+    manifest = _write_skin(os.path.basename(skin_dir), grouped, source)
+    for state in grouped:
+        print(f"  {state}: {manifest['states'][state]} 帧 -> {os.path.join(skin_dir, state)}")
 
 
 def main() -> None:
