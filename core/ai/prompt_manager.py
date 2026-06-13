@@ -27,11 +27,12 @@ from typing import Dict, List
 from core.ai.memory import MemoryManager
 from core.ai.personality import PersonalityManager
 
-# 系统提示词模板：{name}/{personality}/{tone} 由 PersonalityManager 填充。
-# {tone} 为用户在设置界面自定义的性格语气（可空）。
+# 系统提示词模板：{name}/{personality}/{character}/{tone} 由 PersonalityManager 填充。
+# {character}（性格）与 {tone}（语气）为用户在设置界面自定义的两个独立文本（可空）。
 _SYSTEM_PROMPT_TEMPLATE = (
     "你是一只名叫 {name} 的桌面虚拟宠物，像真实宠物一样陪伴主人，用第一人称说话。\n"
     "{personality}"
+    "{character}"
     "{tone}"
     "回复要求：\n"
     "1. 像可爱的小宠物一样说话，有情绪、有温度，可带简单的拟声或动作（如「喵~」「(蹭蹭)」「(歪头)」）。\n"
@@ -59,16 +60,20 @@ class PromptManager:
         self.memory = memory
 
     def system_prompt(self) -> str:
-        """生成系统提示词：宠物名称 + 人格描述 + 自定义语气 + 回复风格要求。"""
+        """生成系统提示词：名称 + 人格参数 + 自定义性格 + 自定义语气 + 回复风格要求。"""
         describe = self.personality.describe()
         personality_line = f"{describe}\n" if describe else ""
 
+        character = (self.personality.character or "").strip()
+        character_line = f"你的性格：{character}\n" if character else ""
+
         tone = (self.personality.tone or "").strip()
-        tone_line = f"你的性格与说话风格：{tone}\n" if tone else ""
+        tone_line = f"你的说话语气：{tone}\n" if tone else ""
 
         return _SYSTEM_PROMPT_TEMPLATE.format(
             name=self.personality.name,
             personality=personality_line,
+            character=character_line,
             tone=tone_line,
         )
 

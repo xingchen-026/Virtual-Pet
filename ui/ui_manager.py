@@ -200,7 +200,8 @@ class UIManager:
         elif action == "settings":
             personality = self.ai_service.personality
             self.settings_window.open(
-                self.pet_sprite.scale, personality.name, personality.tone, self.ai_config
+                self.pet_sprite.scale, personality.name,
+                personality.character, personality.tone, self.ai_config,
             )
             self.stats_panel.hide()
             self.desktop_manager.focus()
@@ -222,7 +223,8 @@ class UIManager:
             name = result["name"] or personality.name
             self.pet.set_name(name)
             personality.name = name
-            personality.tone = result["persona"]
+            personality.character = result["character"]
+            personality.tone = result["tone"]
             personality.save()
             self.chat_window.pet_name = name
 

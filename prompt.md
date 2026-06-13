@@ -28,14 +28,14 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：①**统一宠物名称**——Pet.name 与人格名称统一（启动时以人格名为准同步到
-  Pet，设置改名时同步 Pet/人格/聊天窗口标题并持久化），数值面板与聊天窗口显示同一名称。
-  ②设置界面新增**名称**与**性格语气**输入（性格语气自由文本注入系统提示词，可微调说话风格）。
-  ③**优化系统提示词**（更像真实宠物、简短有情绪、记忆感、健康友善约束）。④新增**内容审查**
-  （`core/ai/moderation.py` + `config/moderation.json`）：用户输入与 AI 回复双向过滤脏话/色情/
-  暴力血腥/政治敏感等，命中即温和岔开（系统提示词约束之外的第二道防线）。
-- 之前：聊天/设置窗口靠边停靠避免遮挡宠物（聊天左、设置右）；数值面板去掉年龄；
-  「拖放道具」已被否决回退。
+- **最近一次完成**：设置界面把**性格与语气拆成两个独立字段**（personality.character / .tone，
+  分别注入系统提示词「你的性格：…」「你的说话语气：…」）。⚠️**事故修复**：上一轮冒烟测试
+  误调用设置保存写入空 api_key，把本地 `config/ai_config.json` 的真实 Key 覆盖清空了
+  （该文件 skip-worktree，不显示在 git status，恢复运行时数据时被漏掉）。Key 无法找回
+  （从未入库、无备份），需用户在设置里重新粘贴。已确立安全做法：冒烟前先 `cp ai_config.json` 备份、测后还原。
+- 在此之前（已提交 `bf820eb`）：统一宠物名称、设置改名、系统提示词优化、内容审查
+  （`core/ai/moderation.py` + `config/moderation.json` 双向过滤）。
+- 之前：聊天/设置窗口靠边停靠避免遮挡宠物；数值面板去掉年龄；「拖放道具」已被否决回退。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
   - 功能向：聊天历史持久化展示、SAD 等新状态专属动画、皮肤切换的图形化入口
@@ -57,7 +57,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 55 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 56 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -139,7 +139,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 55 passed）
+python -m pytest tests/ -q            # 回归测试（当前 56 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk
@@ -162,3 +162,8 @@ python tools/import_skin.py 表情图.png --name 皮肤名 --grid 3x6 --states e
 - **皮肤网格切分**：均匀网格会把相邻格越界的精灵边缘切进来，`_remove_border_debris` 按「贴边且远小于主体」剔除；
   zZ/星星/气泡等合法装饰不受影响（阈值 `_BORDER_DEBRIS_RATIO`）。
 - **PowerShell/Bash**：本机两种 shell 都可用；停止桌宠用 `Get-Process python | Stop-Process -Force`。
+- **冒烟测试勿污染真实配置**：`config/ai_config.json` 被 `git update-index --skip-worktree` 屏蔽，
+  不显示在 `git status`，`git checkout` 也不还原。冒烟里任何会触发设置保存（写 ai_config）的操作
+  前，必须先 `cp config/ai_config.json /tmp/bak` 备份、测后还原；否则会覆盖用户真实 API Key
+  且无法找回（曾因此清空过用户 Key）。同理 `data/*.json`、`config/{user_config,personality}.json`
+  会被冒烟写脏，测后用 `git checkout --` 还原。
