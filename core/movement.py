@@ -33,6 +33,10 @@ class MovementController:
         # 由 Game 设置为整个屏幕大小，宠物可在桌面上自由漫游。
         self.bounds: Tuple[int, int] = (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT)
 
+        # 漫游目标的边缘内缩（左右, 上下）。窗口跟随模式下设为半个窗口，
+        # 使宠物不会漫游到屏幕边缘导致窗口（及右键面板）跑出屏幕外。
+        self.inset: Tuple[int, int] = (0, 0)
+
         # 移动过程中的浮点坐标。Pet.position 为整数坐标（供 Sprite/Rect 使用），
         # 若每帧都从中读回作为移动起点，低速移动时的小数步长会被舍入吞掉，
         # 导致位置卡死不再前进。移动期间改为维护此浮点坐标作为唯一来源。
@@ -47,20 +51,32 @@ class MovementController:
         self.target = None
         self._float_position = None
 
-    def set_bounds(self, width: int, height: int) -> None:
-        """设置漫游范围（桌面窗口跟随模式下为屏幕大小）。"""
+    def set_bounds(self, width: int, height: int, inset: Tuple[int, int] = (0, 0)) -> None:
+        """设置漫游范围与边缘内缩（桌面窗口跟随模式下为屏幕大小 + 半窗口内缩）。"""
         self.bounds = (width, height)
+        self.inset = inset
 
     def pick_random_target(self, speed: float) -> Tuple[float, float]:
-        """在漫游范围内随机选取一个目标位置，并设置移动速度。"""
+        """在漫游范围内随机选取一个目标位置，并设置移动速度。
+
+        范围会同时考虑 movement_margin 与 inset（半窗口），
+        并对内缩后区间做钳制，避免屏幕过小时上下限反转。
+        """
         margin = self.config["movement_margin"]
-        x = random.uniform(margin, self.bounds[0] - margin)
-        y = random.uniform(margin, self.bounds[1] - margin)
+        x = self._random_in_range(self.inset[0] + margin, self.bounds[0] - self.inset[0] - margin)
+        y = self._random_in_range(self.inset[1] + margin, self.bounds[1] - self.inset[1] - margin)
 
         self.target = (x, y)
         self.speed = speed
         self._float_position = (float(self.pet.position[0]), float(self.pet.position[1]))
         return self.target
+
+    @staticmethod
+    def _random_in_range(low: float, high: float) -> float:
+        """在 [low, high] 内取随机值；区间反转时返回其中点。"""
+        if low >= high:
+            return (low + high) / 2
+        return random.uniform(low, high)
 
     def update(self, dt: float) -> bool:
         """向目标移动一步，返回是否已到达目标。

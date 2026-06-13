@@ -18,14 +18,8 @@ from typing import List, Optional, Tuple
 
 import pygame
 
+from ui import theme
 from ui.message_box import MessageBox
-
-PANEL_BG_COLOR = (255, 255, 255)
-BORDER_COLOR = (180, 180, 180)
-INPUT_BG_COLOR = (245, 245, 245)
-PLACEHOLDER_COLOR = (150, 150, 150)
-TEXT_COLOR = (40, 40, 40)
-TITLE_COLOR = (80, 80, 80)
 
 PADDING = 8
 TITLE_HEIGHT = 22
@@ -118,13 +112,13 @@ class ChatWindow:
             return
 
         panel = pygame.Surface(self.rect.size)
-        panel.fill(PANEL_BG_COLOR)
-        pygame.draw.rect(panel, BORDER_COLOR, panel.get_rect(), 1)
+        panel.fill(theme.PANEL_BG_COLOR)
+        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
 
-        title_surface = self.font.render(f"和 {self.pet_name} 聊天 (Esc 关闭)", True, TITLE_COLOR)
+        title_surface = self.font.render(f"和 {self.pet_name} 聊天 (Esc 关闭)", True, theme.TITLE_COLOR)
         panel.blit(title_surface, (PADDING, (TITLE_HEIGHT - title_surface.get_height()) // 2))
         pygame.draw.line(
-            panel, BORDER_COLOR,
+            panel, theme.BORDER_COLOR,
             (0, TITLE_HEIGHT), (self.rect.width, TITLE_HEIGHT),
         )
 
@@ -160,15 +154,15 @@ class ChatWindow:
         surface.set_clip(clip)
 
     def _draw_input(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
-        pygame.draw.rect(surface, INPUT_BG_COLOR, rect, border_radius=4)
-        pygame.draw.rect(surface, BORDER_COLOR, rect, 1, border_radius=4)
+        pygame.draw.rect(surface, theme.FIELD_BG_COLOR, rect, border_radius=4)
+        pygame.draw.rect(surface, theme.BORDER_COLOR, rect, 1, border_radius=4)
 
         if self.input_text:
-            display_text, color = self.input_text, TEXT_COLOR
+            display_text, color = self.input_text, theme.TEXT_COLOR
         elif self.pending:
-            display_text, color = f"{self.pet_name} 正在输入...", PLACEHOLDER_COLOR
+            display_text, color = f"{self.pet_name} 正在输入...", theme.PLACEHOLDER_COLOR
         else:
-            display_text, color = "输入消息，按 Enter 发送", PLACEHOLDER_COLOR
+            display_text, color = "输入消息，按 Enter 发送", theme.PLACEHOLDER_COLOR
 
         text_surface = self.font.render(display_text, True, color)
         surface.blit(

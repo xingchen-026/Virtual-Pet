@@ -32,12 +32,13 @@ class ActionResult:
     """行为执行结果。
 
     animation: 行为触发的临时动画状态名称（对应 AnimationState 的值）。
-    message: 交互提示文案，空字符串表示不显示提示。
     duration: 临时动画播放时长（秒），结束后自动恢复为状态对应动画。
+
+    属性变化的数值提示由 Game 对比交互前后的宠物属性生成
+    （见 Game._record_attr_deltas），不在此携带文案。
     """
 
     animation: str
-    message: str
     duration: float = 1.0
 
 
@@ -58,7 +59,7 @@ class ClickAction(Action):
     def execute(self, pet: Pet) -> ActionResult:
         pet.increase_mood(self.MOOD_GAIN)
         pet.decrease_energy(self.ENERGY_COST)
-        return ActionResult(animation="happy", message=f"+{self.MOOD_GAIN} Mood", duration=0.8)
+        return ActionResult(animation="happy", duration=0.8)
 
 
 class ExcitedAction(Action):
@@ -68,18 +69,14 @@ class ExcitedAction(Action):
 
     def execute(self, pet: Pet) -> ActionResult:
         pet.increase_mood(self.MOOD_GAIN)
-        return ActionResult(
-            animation="excited",
-            message=f"Excited! +{self.MOOD_GAIN} Mood",
-            duration=1.2,
-        )
+        return ActionResult(animation="excited", duration=1.2)
 
 
 class TouchAction(Action):
     """抓取/触摸反馈：拖拽开始时的短暂互动动画，不修改属性数值。"""
 
     def execute(self, pet: Pet) -> ActionResult:
-        return ActionResult(animation="interact", message="", duration=0.4)
+        return ActionResult(animation="interact", duration=0.4)
 
 
 class FeedAction(Action):
@@ -91,8 +88,7 @@ class FeedAction(Action):
     def execute(self, pet: Pet) -> ActionResult:
         pet.increase_hunger(self.food.hunger_restore)
         pet.increase_mood(self.food.mood_restore)
-        message = f"+{self.food.hunger_restore:g} Hunger  +{self.food.mood_restore:g} Mood"
-        return ActionResult(animation="eating", message=message, duration=1.5)
+        return ActionResult(animation="eating", duration=1.5)
 
 
 class PlayAction(Action):
@@ -106,10 +102,7 @@ class PlayAction(Action):
         pet.increase_mood(self.MOOD_GAIN)
         pet.decrease_energy(self.ENERGY_COST)
         pet.decrease_hunger(self.HUNGER_COST)
-        message = (
-            f"+{self.MOOD_GAIN} Mood  -{self.ENERGY_COST} Energy  -{self.HUNGER_COST} Hunger"
-        )
-        return ActionResult(animation="playing", message=message, duration=1.5)
+        return ActionResult(animation="playing", duration=1.5)
 
 
 class BehaviorManager:

@@ -18,16 +18,7 @@ from typing import Dict, Optional
 import pygame
 
 from config import settings
-
-PANEL_BG_COLOR = (255, 255, 255)
-BORDER_COLOR = (160, 160, 160)
-LABEL_COLOR = (60, 60, 60)
-VALUE_COLOR = (40, 40, 40)
-FIELD_BG_COLOR = (245, 245, 245)
-FIELD_FOCUS_BORDER = (90, 140, 220)
-BUTTON_BG_COLOR = (235, 242, 250)
-BUTTON_BORDER_COLOR = (150, 170, 200)
-BUTTON_TEXT_COLOR = (40, 60, 90)
+from ui import theme
 
 TITLE_TEXT = "设置"
 
@@ -206,16 +197,16 @@ class SettingsWindow:
             return
 
         panel = pygame.Surface(self.rect.size)
-        panel.fill(PANEL_BG_COLOR)
-        pygame.draw.rect(panel, BORDER_COLOR, panel.get_rect(), 1)
+        panel.fill(theme.PANEL_BG_COLOR)
+        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
 
         self._hit_areas = {}
         line_height = self.font.get_linesize()
 
-        title = self.font.render(f"{TITLE_TEXT} (Esc 关闭)", True, LABEL_COLOR)
+        title = self.font.render(f"{TITLE_TEXT} (Esc 关闭)", True, theme.LABEL_COLOR)
         panel.blit(title, (PADDING, PADDING))
         pygame.draw.line(
-            panel, BORDER_COLOR,
+            panel, theme.BORDER_COLOR,
             (PADDING, PADDING + line_height + 2),
             (self.rect.width - PADDING, PADDING + line_height + 2),
         )
@@ -237,7 +228,7 @@ class SettingsWindow:
         }
 
     def _draw_scale_row(self, panel: pygame.Surface, y: int) -> int:
-        label = self.font.render("宠物大小", True, LABEL_COLOR)
+        label = self.font.render("宠物大小", True, theme.LABEL_COLOR)
         panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
 
         value_x = self.rect.width // 2
@@ -249,27 +240,27 @@ class SettingsWindow:
             ("scale_minus", minus_rect, "-"),
             ("scale_plus", plus_rect, "+"),
         ):
-            pygame.draw.rect(panel, BUTTON_BG_COLOR, rect, border_radius=4)
-            pygame.draw.rect(panel, BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
-            glyph = self.font.render(text, True, BUTTON_TEXT_COLOR)
+            pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=4)
+            pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
+            glyph = self.font.render(text, True, theme.BUTTON_TEXT_COLOR)
             panel.blit(glyph, glyph.get_rect(center=rect.center))
             self._hit_areas[name] = rect
 
-        value = self.font.render(f"{self.pet_scale:.1f}x", True, VALUE_COLOR)
+        value = self.font.render(f"{self.pet_scale:.1f}x", True, theme.TEXT_COLOR)
         panel.blit(value, value.get_rect(center=value_rect.center))
 
         return y + ROW_HEIGHT
 
     def _draw_provider_row(self, panel: pygame.Surface, y: int) -> int:
-        label = self.font.render("服务商", True, LABEL_COLOR)
+        label = self.font.render("服务商", True, theme.LABEL_COLOR)
         panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
 
         rect = pygame.Rect(
             self.rect.width // 2, y, self.rect.width // 2 - PADDING, FIELD_HEIGHT
         )
-        pygame.draw.rect(panel, BUTTON_BG_COLOR, rect, border_radius=4)
-        pygame.draw.rect(panel, BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
-        value = self.font.render(f"{self.provider} (点击切换)", True, BUTTON_TEXT_COLOR)
+        pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=4)
+        pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
+        value = self.font.render(f"{self.provider} (点击切换)", True, theme.BUTTON_TEXT_COLOR)
         panel.blit(value, value.get_rect(center=rect.center))
         self._hit_areas["provider"] = rect
 
@@ -278,17 +269,17 @@ class SettingsWindow:
     def _draw_field_row(
         self, panel: pygame.Surface, y: int, label_text: str, name: str, display: str
     ) -> int:
-        label = self.font.render(label_text, True, LABEL_COLOR)
+        label = self.font.render(label_text, True, theme.LABEL_COLOR)
         panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
 
         rect = pygame.Rect(
             self.rect.width // 2, y, self.rect.width // 2 - PADDING, FIELD_HEIGHT
         )
-        pygame.draw.rect(panel, FIELD_BG_COLOR, rect, border_radius=4)
-        border = FIELD_FOCUS_BORDER if self._focus == name else BORDER_COLOR
+        pygame.draw.rect(panel, theme.FIELD_BG_COLOR, rect, border_radius=4)
+        border = theme.FIELD_FOCUS_BORDER if self._focus == name else theme.BORDER_COLOR
         pygame.draw.rect(panel, border, rect, 1, border_radius=4)
 
-        text = self.font.render(display, True, VALUE_COLOR)
+        text = self.font.render(display, True, theme.TEXT_COLOR)
         clip = panel.get_clip()
         panel.set_clip(rect.inflate(-8, 0))
         panel.blit(text, (rect.x + 6, rect.y + (rect.height - text.get_height()) // 2))
@@ -312,11 +303,11 @@ class SettingsWindow:
             return
 
         if self.status_ok is True:
-            color = (60, 150, 70)
+            color = theme.STATUS_OK_COLOR
         elif self.status_ok is False:
-            color = (200, 70, 70)
+            color = theme.STATUS_FAIL_COLOR
         else:
-            color = (120, 120, 120)
+            color = theme.STATUS_PENDING_COLOR
 
         from ui.message_box import wrap_text
 
@@ -338,8 +329,8 @@ class SettingsWindow:
             rect = pygame.Rect(
                 PADDING + index * (button_width + PADDING), y, button_width, BUTTON_HEIGHT
             )
-            pygame.draw.rect(panel, BUTTON_BG_COLOR, rect, border_radius=6)
-            pygame.draw.rect(panel, BUTTON_BORDER_COLOR, rect, 1, border_radius=6)
-            glyph = self.font.render(text, True, BUTTON_TEXT_COLOR)
+            pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=6)
+            pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=6)
+            glyph = self.font.render(text, True, theme.BUTTON_TEXT_COLOR)
             panel.blit(glyph, glyph.get_rect(center=rect.center))
             self._hit_areas[name] = rect

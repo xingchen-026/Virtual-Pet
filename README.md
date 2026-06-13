@@ -48,8 +48,13 @@ VirtualPet/
 │       └── ai_service.py       # AI 服务入口（Pet -> AIService -> LLM）
 │
 ├── ui/
+│   ├── theme.py             # UI 共享配色常量
 │   ├── chat_window.py        # AI 对话窗口（输入框 / 消息历史 / 滚动）
-│   └── message_box.py        # 聊天消息气泡渲染
+│   ├── message_box.py        # 聊天消息气泡渲染
+│   ├── stats_panel.py        # 右键数值信息与功能按钮面板
+│   └── settings_window.py    # 设置窗口（宠物大小 / AI 配置）
+│
+├── tests/                   # pytest 回归测试（Pet/情绪/记忆/精灵图切分）
 │
 ├── assets/
 │   ├── images/               # 图片资源
@@ -141,6 +146,15 @@ VirtualPet/
    - 皮肤未覆盖的动画状态自动回退到内置动画；切回默认皮肤可将
      `config/skin_config.json` 的 `active_skin` 改为 `"default"`。
    - 背景与主体颜色接近导致切分/去背景异常时，用 `--tolerance` 调节阈值。
+
+## 运行测试
+
+核心逻辑（Pet 属性钳制、情绪分析、记忆系统、精灵图切分）的回归测试位于
+`tests/`，无需图形界面即可运行：
+
+```
+python -m pytest tests/ -q
+```
 
 ## 当前完成阶段
 

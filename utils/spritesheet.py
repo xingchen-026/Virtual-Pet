@@ -113,7 +113,7 @@ def slice_sheet(
             cell_top, cell_bottom = top + int(cell_rows[0]), top + int(cell_rows[-1]) + 1
 
             frame = rgba[cell_top:cell_bottom, left:right]
-            row_frames.append(Image.fromarray(frame, mode="RGBA"))
+            row_frames.append(Image.fromarray(frame))
 
         if row_frames:
             rows.append(row_frames)
@@ -189,7 +189,7 @@ def slice_grid(
             cell = rgba[top:bottom, left:right].copy()
             cell[:, :, 3] = np.where(cell_mask, cell[:, :, 3], 0)
             frame = cell[int(ys[0]): int(ys[-1]) + 1, int(xs[0]): int(xs[-1]) + 1]
-            cells.append(Image.fromarray(frame, mode="RGBA"))
+            cells.append(Image.fromarray(frame))
 
     return cells
 

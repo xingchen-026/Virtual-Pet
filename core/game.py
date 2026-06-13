@@ -135,9 +135,16 @@ class Game:
             self.pet, self.behavior, behavior_config, self.behavior_logger
         )
 
+        # 用户偏好（宠物大小、窗口位置等），整局共用一份，退出时合并写回
+        self.user_config = load_json(settings.USER_CONFIG_FILE) or {}
+
         # 窗口跟随模式：宠物固定渲染在窗口中心，Pet.position 为屏幕坐标，
         # 移动通过移动整个窗口实现，漫游范围扩展为整个屏幕
         self._window_center = (settings.WINDOW_WIDTH // 2, settings.WINDOW_HEIGHT // 2)
+        # 优先使用上次退出时保存的窗口位置，否则用 desktop_manager 的初始位置
+        saved_pos = self.user_config.get("window_position")
+        if saved_pos and self.desktop_manager.supported:
+            self.desktop_manager.set_position(*saved_pos)
         self._window_pos = self.desktop_manager.get_position()
         if self.desktop_manager.supported:
             self.pet_sprite.render_center = self._window_center
@@ -145,8 +152,9 @@ class Game:
                 self._window_pos[0] + self._window_center[0],
                 self._window_pos[1] + self._window_center[1],
             )
+            # 漫游目标内缩半个窗口，确保窗口（及右键面板）始终留在屏幕内
             self.autonomous_manager.movement.set_bounds(
-                *self.desktop_manager.get_screen_size()
+                *self.desktop_manager.get_screen_size(), inset=self._window_center
             )
 
         # 界面字体：必须使用含中文字形的系统字体（settings.UI_FONT_NAMES），
@@ -160,9 +168,8 @@ class Game:
         # 在数值面板对应行后以 +xx/-xx 形式短暂显示
         self._attr_deltas: dict = {}
 
-        # 用户偏好（宠物大小等）与设置窗口
-        user_config = load_json(settings.USER_CONFIG_FILE) or {}
-        self.pet_sprite.scale = user_config.get("pet_scale", settings.PET_SCALE_DEFAULT)
+        # 设置窗口（宠物大小读取自上面加载的 user_config）
+        self.pet_sprite.scale = self.user_config.get("pet_scale", settings.PET_SCALE_DEFAULT)
         settings_rect = pygame.Rect(
             (settings.WINDOW_WIDTH - SETTINGS_WINDOW_SIZE[0]) // 2,
             (settings.WINDOW_HEIGHT - SETTINGS_WINDOW_SIZE[1]) // 2,
@@ -410,7 +417,8 @@ class Game:
 
         if result.get("action") == "save":
             self.pet_sprite.scale = result["pet_scale"]
-            save_json(settings.USER_CONFIG_FILE, {"pet_scale": result["pet_scale"]})
+            self.user_config["pet_scale"] = result["pet_scale"]
+            self._save_user_config()
 
             self.ai_config.update(result["ai_config"])
             save_json(settings.AI_CONFIG_FILE, self.ai_config)
@@ -511,6 +519,12 @@ class Game:
             self._autosave_timer = 0.0
             save_json(settings.PET_DATA_FILE, self.pet.to_dict())
 
+    def _save_user_config(self) -> None:
+        """将用户偏好（宠物大小、当前窗口位置等）合并写回 user_config.json。"""
+        if self.desktop_manager.supported:
+            self.user_config["window_position"] = list(self._window_pos)
+        save_json(settings.USER_CONFIG_FILE, self.user_config)
+
     def _update_attr_deltas(self, dt: float) -> None:
         """推进属性变化提示的剩余显示时间，移除已过期的条目。"""
         expired = []
@@ -580,8 +594,9 @@ class Game:
         ]
 
     def _quit(self):
-        """停止系统托盘、保存宠物数据并安全退出 Pygame 与程序。"""
+        """停止系统托盘、保存宠物数据与用户偏好并安全退出 Pygame 与程序。"""
         self.tray_icon.stop()
         save_json(settings.PET_DATA_FILE, self.pet.to_dict())
+        self._save_user_config()
         pygame.quit()
         sys.exit()

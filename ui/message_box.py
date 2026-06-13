@@ -11,10 +11,7 @@ from typing import List
 
 import pygame
 
-# 用户消息 / 宠物消息的气泡背景色
-USER_BUBBLE_COLOR = (210, 235, 255)
-PET_BUBBLE_COLOR = (255, 230, 240)
-TEXT_COLOR = (40, 40, 40)
+from ui import theme
 
 PADDING = 8
 
@@ -55,6 +52,11 @@ class MessageBox:
         # 行高随字体变化（中文字体行高大于默认英文字体），避免行间重叠
         self.line_height = font.get_linesize()
 
+        # 消息文本固定不变，预渲染各行 Surface，避免聊天窗口每帧重复 render
+        self._line_surfaces = [font.render(line, True, theme.TEXT_COLOR) for line in self.lines]
+        content_width = max((s.get_width() for s in self._line_surfaces), default=0)
+        self._width = min(content_width + 2 * PADDING, self.max_width)
+
     @property
     def height(self) -> int:
         """气泡渲染所占的总高度（像素）。"""
@@ -62,13 +64,10 @@ class MessageBox:
 
     def draw(self, surface: pygame.Surface, x: int, y: int) -> None:
         """在 (x, y) 处绘制气泡（左上角坐标）。"""
-        color = USER_BUBBLE_COLOR if self.sender == "user" else PET_BUBBLE_COLOR
-        content_width = max((self.font.size(line)[0] for line in self.lines), default=0)
-        width = min(content_width + 2 * PADDING, self.max_width)
+        color = theme.USER_BUBBLE_COLOR if self.sender == "user" else theme.PET_BUBBLE_COLOR
 
-        rect = pygame.Rect(x, y, width, self.height)
+        rect = pygame.Rect(x, y, self._width, self.height)
         pygame.draw.rect(surface, color, rect, border_radius=8)
 
-        for index, line in enumerate(self.lines):
-            text_surface = self.font.render(line, True, TEXT_COLOR)
+        for index, text_surface in enumerate(self._line_surfaces):
             surface.blit(text_surface, (x + PADDING, y + PADDING + index * self.line_height))

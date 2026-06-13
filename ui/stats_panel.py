@@ -18,14 +18,7 @@ from typing import List, Optional, Tuple
 import pygame
 
 from config import settings
-
-PANEL_BG_COLOR = (255, 255, 255)
-BORDER_COLOR = (160, 160, 160)
-TITLE_COLOR = (60, 60, 60)
-TEXT_COLOR = (40, 40, 40)
-BUTTON_BG_COLOR = (235, 242, 250)
-BUTTON_BORDER_COLOR = (150, 170, 200)
-BUTTON_TEXT_COLOR = (40, 60, 90)
+from ui import theme
 
 TITLE_TEXT = "宠物状态"
 
@@ -100,20 +93,20 @@ class StatsPanel:
         self._panel_rect = pygame.Rect(x, y, width, height)
 
         panel = pygame.Surface((width, height))
-        panel.fill(PANEL_BG_COLOR)
-        pygame.draw.rect(panel, BORDER_COLOR, panel.get_rect(), 1)
+        panel.fill(theme.PANEL_BG_COLOR)
+        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
 
-        title_surface = self.font.render(TITLE_TEXT, True, TITLE_COLOR)
+        title_surface = self.font.render(TITLE_TEXT, True, theme.TITLE_COLOR)
         panel.blit(title_surface, (padding, padding))
         pygame.draw.line(
-            panel, BORDER_COLOR,
+            panel, theme.BORDER_COLOR,
             (padding, padding + line_height - 2),
             (width - padding, padding + line_height - 2),
         )
 
         text_y = padding + line_height
         for line in lines:
-            text_surface = self.font.render(line, True, TEXT_COLOR)
+            text_surface = self.font.render(line, True, theme.TEXT_COLOR)
             panel.blit(text_surface, (padding, text_y))
             text_y += line_height
 
@@ -145,10 +138,10 @@ class StatsPanel:
                     button_width,
                     BUTTON_HEIGHT,
                 )
-                pygame.draw.rect(panel, BUTTON_BG_COLOR, local_rect, border_radius=6)
-                pygame.draw.rect(panel, BUTTON_BORDER_COLOR, local_rect, 1, border_radius=6)
+                pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, local_rect, border_radius=6)
+                pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, local_rect, 1, border_radius=6)
 
-                text_surface = self.font.render(label, True, BUTTON_TEXT_COLOR)
+                text_surface = self.font.render(label, True, theme.BUTTON_TEXT_COLOR)
                 panel.blit(
                     text_surface,
                     (
