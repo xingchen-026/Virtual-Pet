@@ -30,6 +30,9 @@ settings.TRANSPARENT_COLOR_KEY 后由 DesktopManager 设为透明色键，
   宠物漫游范围为整个屏幕。
 * 不支持时（如非 Windows 平台）：退化为"宠物在窗口内移动"
   模式，保证基础可运行。
+* 坐标换算与窗口移动由 core.window_controller.WindowController
+  统一维护（"窗口中心 = 宠物屏幕坐标"不变式），Game 不直接
+  操作窗口位置 / 拖拽锚点。
 
 系统托盘（utils.tray.TrayIcon）运行在独立线程，菜单回调仅将动作
 放入队列，由主循环在 _process_tray_actions() 中统一处理，
@@ -68,6 +71,7 @@ from core.pet import Pet
 from core.resource import ResourceManager
 from core.skin import SkinManager
 from core.sprite import PetSprite
+from core.window_controller import WindowController
 from ui.chat_window import ChatWindow
 from ui.settings_window import SettingsWindow
 from ui.stats_panel import StatsPanel
@@ -106,7 +110,6 @@ class Game:
         # 桌面窗口能力：透明 / 置顶 / 隐藏 / 移动，统一通过 DesktopManager 操作 OS API
         self.desktop_manager = DesktopManager(self.desktop_config)
         self._topmost_timer = 0.0
-        self._drag_anchor = None
 
         self.clock = pygame.time.Clock()
         self.running = True
@@ -138,23 +141,17 @@ class Game:
         # 用户偏好（宠物大小、窗口位置等），整局共用一份，退出时合并写回
         self.user_config = load_json(settings.USER_CONFIG_FILE) or {}
 
-        # 窗口跟随模式：宠物固定渲染在窗口中心，Pet.position 为屏幕坐标，
-        # 移动通过移动整个窗口实现，漫游范围扩展为整个屏幕
-        self._window_center = (settings.WINDOW_WIDTH // 2, settings.WINDOW_HEIGHT // 2)
+        # 窗口跟随控制器：维护"窗口中心 = 宠物屏幕坐标"，集中处理窗口移动/拖拽。
         # 优先使用上次退出时保存的窗口位置，否则用 desktop_manager 的初始位置
-        saved_pos = self.user_config.get("window_position")
-        if saved_pos and self.desktop_manager.supported:
-            self.desktop_manager.set_position(*saved_pos)
-        self._window_pos = self.desktop_manager.get_position()
+        self.window = WindowController(
+            self.desktop_manager, self.pet, self.pet_sprite,
+            (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT),
+        )
+        self.window.initialize(self.user_config.get("window_position"))
         if self.desktop_manager.supported:
-            self.pet_sprite.render_center = self._window_center
-            self.pet.set_position(
-                self._window_pos[0] + self._window_center[0],
-                self._window_pos[1] + self._window_center[1],
-            )
             # 漫游目标内缩半个窗口，确保窗口（及右键面板）始终留在屏幕内
             self.autonomous_manager.movement.set_bounds(
-                *self.desktop_manager.get_screen_size(), inset=self._window_center
+                *self.desktop_manager.get_screen_size(), inset=self.window.center
             )
 
         # 界面字体：必须使用含中文字形的系统字体（settings.UI_FONT_NAMES），
@@ -317,18 +314,18 @@ class Game:
             return
 
         if interaction_event.type == InteractionEventType.DRAG_START:
-            self._begin_window_drag()
+            self.window.begin_drag()
             return
 
         if interaction_event.type == InteractionEventType.DRAG_MOVE:
-            if self._drag_anchor is not None:
-                self._update_window_drag()
+            if self.window.dragging_window:
+                self.window.update_drag()
             else:
                 self.pet.set_position(*interaction_event.position)
             return
 
         if interaction_event.type == InteractionEventType.DRAG_END:
-            self._drag_anchor = None
+            self.window.end_drag()
             return
 
         # 记录行为前后的属性变化，在数值面板对应行后以 +xx/-xx 显示
@@ -346,52 +343,6 @@ class Game:
             self.behavior_logger.log(log_message)
 
         self.ai_service.notify_interaction(self.pet, interaction_event.type.value)
-
-    def _begin_window_drag(self):
-        """开始拖拽：记录窗口移动的起始锚点（窗口移动拖拽）。
-
-        仅在支持桌面窗口能力（Windows）时记录锚点；不支持的平台
-        self._drag_anchor 保持 None，DRAG_MOVE 将退化为"宠物在
-        窗口内移动"的普通互动拖拽，二者通过 self._drag_anchor 是否
-        为 None 区分，互不干扰。
-        """
-        if not self.desktop_manager.supported:
-            return
-
-        self._drag_anchor = (
-            self.desktop_manager.get_cursor_position(),
-            self.desktop_manager.get_position(),
-        )
-
-    def _update_window_drag(self):
-        """根据鼠标在屏幕坐标系下的位移，移动整个桌宠窗口（窗口移动拖拽）。
-
-        同步更新 Pet.position（屏幕坐标），保持"窗口中心 = 宠物位置"
-        的不变式，避免拖拽结束后窗口被 _sync_window_to_pet() 拉回原位。
-        """
-        start_cursor, start_window = self._drag_anchor
-        cursor_x, cursor_y = self.desktop_manager.get_cursor_position()
-        new_x = start_window[0] + cursor_x - start_cursor[0]
-        new_y = start_window[1] + cursor_y - start_cursor[1]
-
-        self.desktop_manager.set_position(new_x, new_y)
-        self._window_pos = (new_x, new_y)
-        self.pet.set_position(
-            new_x + self._window_center[0], new_y + self._window_center[1]
-        )
-
-    def _sync_window_to_pet(self):
-        """窗口跟随宠物：使窗口中心始终对准宠物的屏幕坐标。"""
-        if not self.desktop_manager.supported:
-            return
-
-        target = (
-            self.pet.position[0] - self._window_center[0],
-            self.pet.position[1] - self._window_center[1],
-        )
-        if target != self._window_pos:
-            self.desktop_manager.set_position(*target)
-            self._window_pos = target
 
     def _handle_panel_action(self, action) -> None:
         """分发数值面板功能按钮的动作（喂食 / 玩耍 / 聊天 / 设置）。"""
@@ -505,7 +456,7 @@ class Game:
             or self.settings_window.visible
         )
         self.autonomous_manager.update(dt, interaction_active)
-        self._sync_window_to_pet()
+        self.window.sync_to_pet()
         self.pet_sprite.update(dt)
         self._update_attr_deltas(dt)
 
@@ -521,8 +472,8 @@ class Game:
 
     def _save_user_config(self) -> None:
         """将用户偏好（宠物大小、当前窗口位置等）合并写回 user_config.json。"""
-        if self.desktop_manager.supported:
-            self.user_config["window_position"] = list(self._window_pos)
+        if self.window.supported:
+            self.user_config["window_position"] = list(self.window.window_pos)
         save_json(settings.USER_CONFIG_FILE, self.user_config)
 
     def _update_attr_deltas(self, dt: float) -> None:
