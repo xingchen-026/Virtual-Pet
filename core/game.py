@@ -169,6 +169,9 @@ class Game:
         self.memory = MemoryManager()
         self.ai_service = AIService(self.ai_config, self.personality, self.memory, self.behavior)
 
+        # 统一宠物名称：以人格服务的名称为准，同步到 Pet（数值面板与聊天窗口共用同一名称）
+        self.pet.set_name(self.personality.name)
+
         # 界面管理器：聊天窗口 / 数值面板 / 设置窗口及其事件路由与异步结果回传。
         # 喂食/玩耍按钮经 on_interaction 回到交互分发管线；
         # 保存设置后经 on_user_prefs_changed 让 Game 合并持久化用户偏好。

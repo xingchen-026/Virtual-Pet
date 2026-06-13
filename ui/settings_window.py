@@ -40,6 +40,8 @@ class SettingsWindow:
         self.rect = rect
         self.visible = False
 
+        self.name = ""
+        self.persona = ""
         self.pet_scale = settings.PET_SCALE_DEFAULT
         self.provider = PROVIDERS[0]
         self.model = ""
@@ -49,14 +51,16 @@ class SettingsWindow:
         self.status: str = ""
         self.status_ok = None
 
-        # 当前聚焦的文本输入字段（"model" / "api_key" / None）
+        # 当前聚焦的文本输入字段（"name" / "persona" / "model" / "api_key" / None）
         self._focus: Optional[str] = None
         # 控件名 -> 窗口坐标命中区域（draw 时刷新）
         self._hit_areas: Dict[str, pygame.Rect] = {}
 
-    def open(self, pet_scale: float, ai_config: dict) -> None:
+    def open(self, pet_scale: float, name: str, persona: str, ai_config: dict) -> None:
         """打开设置窗口，并以当前配置初始化各编辑项。"""
         self.visible = True
+        self.name = name
+        self.persona = persona
         self.pet_scale = pet_scale
         self.provider = ai_config.get("provider", PROVIDERS[0])
         if self.provider not in PROVIDERS:
@@ -122,7 +126,7 @@ class SettingsWindow:
             elif name == "provider":
                 index = PROVIDERS.index(self.provider)
                 self.provider = PROVIDERS[(index + 1) % len(PROVIDERS)]
-            elif name in ("model", "api_key"):
+            elif name in ("name", "persona", "model", "api_key"):
                 self._focus = name
                 # 将输入法候选窗口定位到输入框处
                 pygame.key.set_text_input_rect(rect)
@@ -183,6 +187,8 @@ class SettingsWindow:
         self.visible = False
         return {
             "action": "save",
+            "name": self.name.strip(),
+            "persona": self.persona.strip(),
             "pet_scale": self.pet_scale,
             "ai_config": self._collect_ai_config(),
         }
@@ -212,6 +218,8 @@ class SettingsWindow:
         )
 
         y = PADDING + line_height + 10
+        y = self._draw_field_row(panel, y, "名称", "name", self.name)
+        y = self._draw_field_row(panel, y, "性格语气", "persona", self.persona)
         y = self._draw_scale_row(panel, y)
         y = self._draw_provider_row(panel, y)
         y = self._draw_field_row(panel, y, "模型", "model", self.model)

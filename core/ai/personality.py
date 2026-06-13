@@ -23,6 +23,8 @@ _DEFAULT_PERSONALITY: Dict = {
         "humor": 70,
         "curiosity": 90,
     },
+    # 用户在设置界面自定义的性格与说话风格（自由文本，可空）
+    "tone": "",
 }
 
 
@@ -37,6 +39,8 @@ class PersonalityManager:
         self.traits: Dict[str, float] = dict(
             data.get("personality", _DEFAULT_PERSONALITY["personality"])
         )
+        # 用户自定义的性格/语气描述（设置界面可微调，注入系统提示词）
+        self.tone: str = data.get("tone", "")
 
     def trait(self, key: str, default: float = 50.0) -> float:
         """读取某个人格维度的数值（0-100），不存在时返回 default。"""
@@ -58,4 +62,7 @@ class PersonalityManager:
 
     def save(self) -> None:
         """将当前人格配置写回 data/personality.json。"""
-        save_json(self._file_path, {"name": self.name, "personality": self.traits})
+        save_json(
+            self._file_path,
+            {"name": self.name, "personality": self.traits, "tone": self.tone},
+        )

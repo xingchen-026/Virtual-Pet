@@ -29,6 +29,9 @@ AI_CONFIG_FILE = os.path.join(BASE_DIR, "config", "ai_config.json")
 PERSONALITY_FILE = os.path.join(DATA_DIR, "personality.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 
+# 内容审查违规词配置（脏话/色情/暴力/政治敏感等，数据化便于增删）
+MODERATION_CONFIG_FILE = os.path.join(BASE_DIR, "config", "moderation.json")
+
 # ----- 用户偏好配置 -----
 # 设置窗口可修改的用户偏好（宠物大小等）
 USER_CONFIG_FILE = os.path.join(BASE_DIR, "config", "user_config.json")
@@ -165,9 +168,15 @@ EXCITED_CLICK_THRESHOLD = 3
 # 打开/关闭 AI 对话窗口的按键（对应 pygame.key.name() 返回值）
 CHAT_TOGGLE_KEY = "c"
 
-# 对话窗口在主窗口中的边距与尺寸
+# 对话窗口尺寸与边距。窗口跟随模式下宠物固定在窗口中心，
+# 对话窗口靠左侧停靠、设置窗口靠右侧停靠，避免遮挡居中的宠物。
 CHAT_WINDOW_MARGIN = 20
-CHAT_WINDOW_HEIGHT = 320
+CHAT_WINDOW_WIDTH = 280
+CHAT_WINDOW_HEIGHT = 420
+
+# 设置窗口尺寸（靠右侧停靠，垂直居中）
+SETTINGS_WINDOW_WIDTH = 280
+SETTINGS_WINDOW_HEIGHT = 400
 
 # AI 情绪联动触发的临时动画播放时长（秒）
 AI_EFFECT_ANIMATION_DURATION = 2.0

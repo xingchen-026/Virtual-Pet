@@ -28,6 +28,7 @@ from config import settings
 from core.ai.emotion_analyzer import EmotionAnalyzer, EmotionEffect
 from core.ai.llm_client import LLMClient
 from core.ai.memory import MemoryManager
+from core.ai.moderation import load_moderator
 from core.ai.personality import PersonalityManager
 from core.ai.prompt_manager import PromptManager
 from core.behavior import PetBehavior
@@ -57,6 +58,9 @@ class AIService:
         self.prompt_manager = PromptManager(personality, memory)
         self.emotion_analyzer = EmotionAnalyzer()
 
+        # 内容审查：过滤违规的用户输入与 AI 回复（系统提示词约束之外的第二道防线）
+        self.moderator = load_moderator()
+
         # AI 服务当前是否可用（最近一次 LLM 调用是否成功）
         self.available = True
 
@@ -83,13 +87,17 @@ class AIService:
             return False, f"连接失败：{brief}"
 
     def chat(self, pet, user_message: str) -> str:
-        """处理一轮用户对话：获取回复、应用情绪/行为联动、记录记忆。
+        """处理一轮用户对话：审查 -> 获取回复 -> 审查 -> 情绪/行为联动 -> 记忆。
 
         AI 不可用（API失败/网络异常/模型不可用/返回格式错误）时返回
         离线回复，并仍然基于规则记录情绪联动，保证核心体验连续。
         本方法会阻塞至 LLM 调用返回或失败，调用方（UI 层）应在
         独立线程中调用，避免阻塞主循环。
         """
+        # 第一道审查：违规用户输入不送入 LLM，也不写入记忆，直接温和岔开
+        if not self.moderator.is_safe(user_message):
+            return self.moderator.fallback_reply
+
         messages = self.prompt_manager.build_messages(pet, user_message)
 
         try:
@@ -99,6 +107,12 @@ class AIService:
             log_exception(exc)
             self.available = False
             raw_reply = _OFFLINE_REPLY
+
+        # 第二道审查：违规 AI 回复替换为岔开回复，不展示原文、不联动情绪
+        if not self.moderator.is_safe(raw_reply):
+            reply = self.moderator.fallback_reply
+            self.memory.add_dialogue(user_message, reply)
+            return reply
 
         effect = self.emotion_analyzer.from_tag(raw_reply)
         if effect.is_empty:

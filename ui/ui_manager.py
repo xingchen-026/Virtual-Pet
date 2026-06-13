@@ -34,9 +34,6 @@ from ui.settings_window import SettingsWindow
 from ui.stats_panel import StatsPanel
 from utils.exception import AIServiceError, log_exception
 
-# 设置窗口尺寸（居中显示）
-SETTINGS_WINDOW_SIZE = (380, 310)
-
 # 聊天工作线程意外异常时回传给用户的兜底回复
 _CHAT_FALLBACK_REPLY = "（呜……我刚才走神了，再和我说一遍好吗？）"
 
@@ -92,20 +89,22 @@ class UIManager:
         # 交互引起的属性变化（属性名 -> [变化量, 剩余显示时间]）
         self._attr_deltas: dict = {}
 
-        # 设置窗口（居中）
+        # 设置窗口：靠右侧停靠、垂直居中，避免遮挡居中的宠物
         settings_rect = pygame.Rect(
-            (window_size[0] - SETTINGS_WINDOW_SIZE[0]) // 2,
-            (window_size[1] - SETTINGS_WINDOW_SIZE[1]) // 2,
-            *SETTINGS_WINDOW_SIZE,
+            window_size[0] - settings.SETTINGS_WINDOW_WIDTH - settings.CHAT_WINDOW_MARGIN,
+            (window_size[1] - settings.SETTINGS_WINDOW_HEIGHT) // 2,
+            settings.SETTINGS_WINDOW_WIDTH,
+            settings.SETTINGS_WINDOW_HEIGHT,
         )
         self.settings_window = SettingsWindow(font, settings_rect)
         self._ai_test_results: "queue.Queue[tuple]" = queue.Queue()
 
-        # AI 对话窗口：UI 与 AIService 解耦，AI 回复在后台线程获取，经队列回传主循环
+        # AI 对话窗口：靠左侧停靠，避免遮挡居中的宠物。
+        # UI 与 AIService 解耦，AI 回复在后台线程获取，经队列回传主循环。
         chat_rect = pygame.Rect(
             settings.CHAT_WINDOW_MARGIN,
             settings.CHAT_WINDOW_MARGIN,
-            window_size[0] - 2 * settings.CHAT_WINDOW_MARGIN,
+            settings.CHAT_WINDOW_WIDTH,
             settings.CHAT_WINDOW_HEIGHT,
         )
         self.chat_window = ChatWindow(font, chat_rect, pet_name=self.pet_name())
@@ -199,7 +198,10 @@ class UIManager:
             if self.chat_window.visible:
                 self.desktop_manager.focus()
         elif action == "settings":
-            self.settings_window.open(self.pet_sprite.scale, self.ai_config)
+            personality = self.ai_service.personality
+            self.settings_window.open(
+                self.pet_sprite.scale, personality.name, personality.tone, self.ai_config
+            )
             self.stats_panel.hide()
             self.desktop_manager.focus()
 
@@ -214,6 +216,15 @@ class UIManager:
         if result.get("action") == "save":
             self.pet_sprite.scale = result["pet_scale"]
             self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置）
+
+            # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格
+            personality = self.ai_service.personality
+            name = result["name"] or personality.name
+            self.pet.set_name(name)
+            personality.name = name
+            personality.tone = result["persona"]
+            personality.save()
+            self.chat_window.pet_name = name
 
             self.ai_config.update(result["ai_config"])
             save_ai_config(self.ai_config)
@@ -319,12 +330,12 @@ class UIManager:
     def _stats_lines(self) -> List[str]:
         """生成数值信息面板的内容（右键点击宠物弹出）。
 
-        只展示名称/年龄、各属性数值与时间；行为、情绪、最近动作等
+        只展示名称、各属性数值与时间；行为、情绪、最近动作等
         通过宠物动画直接呈现，不再以文字罗列。喂食/玩耍等交互引起的
         属性变化以 +xx/-xx 后缀短暂显示（见 record_attr_deltas）。
         """
         return [
-            f"名称: {self.pet.name}  年龄: {self.pet.age}",
+            f"名称: {self.pet.name}",
             f"饥饿: {self.pet.hunger:.1f}{self._attr_delta_suffix('hunger')}",
             f"心情: {self.pet.mood:.1f}{self._attr_delta_suffix('mood')}",
             f"体力: {self.pet.energy:.1f}{self._attr_delta_suffix('energy')}",
