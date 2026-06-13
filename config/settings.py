@@ -29,6 +29,10 @@ AI_CONFIG_FILE = os.path.join(BASE_DIR, "config", "ai_config.json")
 PERSONALITY_FILE = os.path.join(DATA_DIR, "personality.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 
+# 聊天窗口显示历史（与 AI 记忆分离：此处保存完整可见对话，重启后回填到聊天窗口）
+CHAT_HISTORY_FILE = os.path.join(DATA_DIR, "chat_history.json")
+CHAT_HISTORY_LIMIT = 60
+
 # 内容审查违规词配置（脏话/色情/暴力/政治敏感等，数据化便于增删）
 MODERATION_CONFIG_FILE = os.path.join(BASE_DIR, "config", "moderation.json")
 
@@ -192,7 +196,7 @@ CHAT_WINDOW_HEIGHT = 420
 
 # 设置窗口尺寸（靠右侧停靠，垂直居中）
 SETTINGS_WINDOW_WIDTH = 280
-SETTINGS_WINDOW_HEIGHT = 440
+SETTINGS_WINDOW_HEIGHT = 480
 
 # 皮肤选择窗口尺寸（靠右侧停靠，垂直居中；缩略图预览选择 + 缺失状态提示）
 SKIN_WINDOW_WIDTH = 300

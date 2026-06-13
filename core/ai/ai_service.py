@@ -40,6 +40,9 @@ _OFFLINE_REPLY = "（暂时联系不到我的大脑，不过我还在这里陪�
 # 首次喂食事件的记忆文案
 _FIRST_FEED_EVENT = "用户第一次喂食"
 
+# 每累计多少轮对话，用 LLM 总结一次主人习惯并写入长期记忆
+_SUMMARY_EVERY = 3
+
 
 class AIService:
     """AI 能力统一入口：对话、人格、记忆、情绪与行为联动。"""
@@ -60,6 +63,9 @@ class AIService:
 
         # 内容审查：过滤违规的用户输入与 AI 回复（系统提示词约束之外的第二道防线）
         self.moderator = load_moderator()
+
+        # 习惯总结缓冲：累计若干轮后用 LLM 总结成长期记忆（不持久化，仅运行时计数）
+        self._summary_buffer: list = []
 
         # AI 服务当前是否可用（最近一次 LLM 调用是否成功）
         self.available = True
@@ -122,7 +128,30 @@ class AIService:
         self._apply_effect(pet, effect)
 
         self.memory.add_dialogue(user_message, reply)
+
+        # 累计若干轮后总结主人习惯，写入长期记忆（仅 LLM 可用时尝试，最佳努力）
+        if self.available:
+            self._summary_buffer.append({"user": user_message, "pet": reply})
+            if len(self._summary_buffer) >= _SUMMARY_EVERY:
+                self._update_long_term_summary()
+
         return reply
+
+    def _update_long_term_summary(self) -> None:
+        """用 LLM 把最近几轮对话总结为一条主人习惯摘要，写入长期记忆。
+
+        最佳努力：失败/违规则跳过；无论成败都清空缓冲，避免反复触发失败调用。
+        """
+        dialogues = self._summary_buffer
+        self._summary_buffer = []
+        try:
+            summary = self.llm_client.chat(self.prompt_manager.summary_messages(dialogues))
+        except AIServiceError as exc:
+            log_exception(exc)
+            return
+        summary = self.emotion_analyzer.strip_tag(summary)
+        if summary and self.moderator.is_safe(summary):
+            self.memory.add_summary(summary)
 
     def notify_interaction(self, pet, action_name: str) -> None:
         """记录用户交互产生的长期重要事件（如首次喂食）。

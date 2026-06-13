@@ -45,14 +45,18 @@ class SettingsWindow:
         self.tone = ""
         self.pet_scale = settings.PET_SCALE_DEFAULT
         self.provider = PROVIDERS[0]
+        self.base_url = ""
         self.model = ""
         self.api_key = ""
+
+        # 服务商下拉是否展开
+        self._provider_open = False
 
         # 连接测试状态行：(文本, 是否成功/None=进行中)
         self.status: str = ""
         self.status_ok = None
 
-        # 当前聚焦的文本输入字段（"name"/"character"/"tone"/"model"/"api_key"/None）
+        # 当前聚焦的文本输入字段（含 base_url）
         self._focus: Optional[str] = None
         # 控件名 -> 窗口坐标命中区域（draw 时刷新）
         self._hit_areas: Dict[str, pygame.Rect] = {}
@@ -69,8 +73,10 @@ class SettingsWindow:
         self.provider = ai_config.get("provider", PROVIDERS[0])
         if self.provider not in PROVIDERS:
             PROVIDERS.append(self.provider)
+        self.base_url = ai_config.get("api_base", "")
         self.model = ai_config.get("model", "")
         self.api_key = ai_config.get("api_key", "")
+        self._provider_open = False
         self.status = ""
         self.status_ok = None
         self._focus = None
@@ -115,8 +121,18 @@ class SettingsWindow:
         return None
 
     def _handle_click(self, pos) -> Optional[dict]:
+        # 下拉展开时，优先处理选项点击（选项浮层覆盖在其它控件之上）
+        if self._provider_open:
+            for name, rect in self._hit_areas.items():
+                if name.startswith("opt:") and rect.collidepoint(pos):
+                    self.provider = name.split(":", 1)[1]
+                    self._provider_open = False
+                    return None
+            self._provider_open = False  # 点别处收起下拉
+            # 不 return，继续判断本次点击是否落在其它控件上
+
         for name, rect in self._hit_areas.items():
-            if not rect.collidepoint(pos):
+            if name.startswith("opt:") or not rect.collidepoint(pos):
                 continue
 
             if name == "scale_minus":
@@ -128,9 +144,8 @@ class SettingsWindow:
                     settings.PET_SCALE_MAX, round(self.pet_scale + settings.PET_SCALE_STEP, 2)
                 )
             elif name == "provider":
-                index = PROVIDERS.index(self.provider)
-                self.provider = PROVIDERS[(index + 1) % len(PROVIDERS)]
-            elif name in ("name", "character", "tone", "model", "api_key"):
+                self._provider_open = not self._provider_open
+            elif name in ("name", "character", "tone", "base_url", "model", "api_key"):
                 self._focus = name
                 # 将输入法候选窗口定位到输入框处
                 pygame.key.set_text_input_rect(rect)
@@ -183,6 +198,7 @@ class SettingsWindow:
     def _collect_ai_config(self) -> dict:
         return {
             "provider": self.provider,
+            "api_base": self.base_url.strip(),
             "model": self.model.strip(),
             "api_key": self.api_key.strip(),
         }
@@ -227,11 +243,16 @@ class SettingsWindow:
         y = self._draw_field_row(panel, y, "性格", "character", self.character)
         y = self._draw_field_row(panel, y, "语气", "tone", self.tone)
         y = self._draw_scale_row(panel, y)
-        y = self._draw_select_row(panel, y, "服务商", "provider", self.provider)
+        provider_rect, y = self._draw_provider_row(panel, y)
+        y = self._draw_field_row(panel, y, "接口地址", "base_url", self.base_url or "（默认）")
         y = self._draw_field_row(panel, y, "模型", "model", self.model)
         y = self._draw_field_row(panel, y, "API Key", "api_key", self._masked_key())
         self._draw_status_row(panel, y)
         self._draw_bottom_buttons(panel)
+
+        # 下拉浮层最后绘制，覆盖在其它行之上
+        if self._provider_open:
+            self._draw_provider_popup(panel, provider_rect)
 
         surface.blit(panel, self.rect.topleft)
 
@@ -265,26 +286,33 @@ class SettingsWindow:
 
         return y + ROW_HEIGHT
 
-    def _draw_select_row(
-        self, panel: pygame.Surface, y: int, label_text: str, name: str, value: str
-    ) -> int:
-        """绘制「点击循环切换」型选择行（用于服务商 / 皮肤）。"""
-        label = self.font.render(label_text, True, theme.LABEL_COLOR)
+    def _draw_provider_row(self, panel: pygame.Surface, y: int):
+        """绘制服务商下拉框（点击展开选项），返回 (字段矩形, 下一个 y)。"""
+        label = self.font.render("服务商", True, theme.LABEL_COLOR)
         panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
 
-        rect = pygame.Rect(
-            self.rect.width // 2, y, self.rect.width // 2 - PADDING, FIELD_HEIGHT
-        )
+        rect = pygame.Rect(self.rect.width // 2, y, self.rect.width // 2 - PADDING, FIELD_HEIGHT)
         pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=4)
         pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
-        text = self.font.render(f"{value} (点击切换)", True, theme.BUTTON_TEXT_COLOR)
-        clip = panel.get_clip()
-        panel.set_clip(rect.inflate(-8, 0))
+        text = self.font.render(self.provider, True, theme.BUTTON_TEXT_COLOR)
         panel.blit(text, text.get_rect(midleft=(rect.x + 6, rect.centery)))
-        panel.set_clip(clip)
-        self._hit_areas[name] = rect
+        arrow = self.font.render("▾", True, theme.BUTTON_TEXT_COLOR)
+        panel.blit(arrow, arrow.get_rect(midright=(rect.right - 6, rect.centery)))
+        self._hit_areas["provider"] = rect
+        return rect, y + ROW_HEIGHT
 
-        return y + ROW_HEIGHT
+    def _draw_provider_popup(self, panel: pygame.Surface, field_rect: pygame.Rect) -> None:
+        """在服务商字段下方绘制下拉选项浮层，并登记各选项命中区。"""
+        for i, provider in enumerate(PROVIDERS):
+            opt = pygame.Rect(field_rect.x, field_rect.bottom + i * FIELD_HEIGHT,
+                              field_rect.width, FIELD_HEIGHT)
+            active = provider == self.provider
+            pygame.draw.rect(panel, theme.FIELD_FOCUS_BORDER if active else theme.PANEL_BG_COLOR, opt)
+            pygame.draw.rect(panel, theme.BORDER_COLOR, opt, 1)
+            color = (255, 255, 255) if active else theme.TEXT_COLOR
+            text = self.font.render(provider, True, color)
+            panel.blit(text, text.get_rect(midleft=(opt.x + 6, opt.centery)))
+            self._hit_areas[f"opt:{provider}"] = opt
 
     def _draw_field_row(
         self, panel: pygame.Surface, y: int, label_text: str, name: str, display: str

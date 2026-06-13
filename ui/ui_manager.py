@@ -35,6 +35,7 @@ from ui.skin_creator import SkinCreator
 from ui.skin_window import SkinWindow
 from ui.stats_panel import StatsPanel
 from utils.exception import AIServiceError, log_exception
+from utils.helper import load_json, save_json
 
 # 聊天工作线程意外异常时回传给用户的兜底回复
 _CHAT_FALLBACK_REPLY = "（呜……我刚才走神了，再和我说一遍好吗？）"
@@ -135,6 +136,11 @@ class UIManager:
         )
         self.chat_window = ChatWindow(font, chat_rect, pet_name=self.pet_name())
         self._ai_replies: "queue.Queue[str]" = queue.Queue()
+
+        # 聊天历史持久化：启动时把上次的可见对话回填到聊天窗口（与 AI 记忆分离）
+        self._chat_history: list = load_json(settings.CHAT_HISTORY_FILE) or []
+        for item in self._chat_history:
+            self.chat_window.add_message(item.get("sender", "pet"), item.get("text", ""))
 
     def pet_name(self) -> str:
         """对话窗口标题使用的宠物名（取自人格服务）。"""
@@ -353,6 +359,7 @@ class UIManager:
         阻塞主循环；意外异常兜底，避免对话窗口永久卡在"正在输入"。
         """
         self.chat_window.add_message("user", message)
+        self._record_chat("user", message)
         self.chat_window.set_pending(True)
 
         def worker() -> None:
@@ -381,6 +388,14 @@ class UIManager:
             reply = self._ai_replies.get_nowait()
             self.chat_window.set_pending(False)
             self.chat_window.add_message("pet", reply)
+            self._record_chat("pet", reply)
+
+    def _record_chat(self, sender: str, text: str) -> None:
+        """把一条可见对话写入聊天历史并持久化（超上限丢弃最旧）。"""
+        self._chat_history.append({"sender": sender, "text": text})
+        if len(self._chat_history) > settings.CHAT_HISTORY_LIMIT:
+            self._chat_history = self._chat_history[-settings.CHAT_HISTORY_LIMIT:]
+        save_json(settings.CHAT_HISTORY_FILE, self._chat_history)
 
     def _process_ai_test_results(self) -> None:
         """将后台线程的连接测试结果写回设置窗口状态行。"""

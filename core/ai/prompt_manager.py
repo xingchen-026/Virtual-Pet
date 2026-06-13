@@ -86,6 +86,19 @@ class PromptManager:
             state=pet.current_state.name,
         )
 
+    def summary_messages(self, dialogues: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """生成「总结主人习惯/偏好」的消息，供 AIService 定期更新长期记忆。"""
+        convo = "\n".join(f"主人：{d['user']}\n你：{d['pet']}" for d in dialogues)
+        instruction = (
+            "下面是主人和你的几轮对话。请用一句不超过 30 字的话，"
+            "总结主人的习惯、喜好或关心的事，作为你长期记住主人的笔记。"
+            "只输出这一句话本身，不要加引号或解释。"
+        )
+        return [
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": convo},
+        ]
+
     def build_messages(self, pet, user_message: str) -> List[Dict[str, str]]:
         """拼接 System Prompt + Pet State + Memory + User Message，生成消息列表。"""
         context = "\n".join([

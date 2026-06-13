@@ -38,7 +38,14 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - 已提交：皮肤选择独立窗口（缩略图预览，`b4cb315`）；性格/语气拆分（`0ee1bc4`）；
   统一名称/设置改名/提示词优化/内容审查（`bf820eb`）。
 - ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
-- **创建窗口交互优化（最新 4 项）**：①精灵图改为**先点中文状态标签、再左键点帧贴标签**
+- **聊天持久化 + 记忆分层 + 设置增强（最新）**：①聊天历史持久化——可见对话存
+  `data/chat_history.json`（`settings.CHAT_HISTORY_*`），重启回填聊天窗口（UIManager 加载+
+  `_record_chat`）；与 AI 记忆分离。②记忆分两层——短期=最近 3 轮（`SHORT_TERM_LIMIT=3`），
+  长期=主人习惯摘要（AIService 每 3 轮用 LLM 总结 `_update_long_term_summary` +
+  `MemoryManager.add_summary`/`PromptManager.summary_messages`）。③设置：服务商改**下拉选择**
+  （SettingsWindow `_provider_open`/`_draw_provider_popup`）+ 新增**接口地址 base_url**字段
+  （写入 ai_config `api_base`）。
+- **创建窗口交互优化（4 项）**：①精灵图改为**先点中文状态标签、再左键点帧贴标签**
   （右键点帧取消），状态名全中文（`settings.STATE_DISPLAY_NAMES`）。②实时播放加**状态选择**
   （点中文 chip 指定播放哪个状态）+ **镜像预览**开关（开则先播朝右再播朝左，
   `_mirror_phase`）。③播放速度改为预览下方的**拖拉条 + 数值框**（数值框用编辑缓冲
@@ -53,7 +60,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
   （`build_from_state_images` 合并保留已有）。抠图：自动取角落 / tkinter 选色 / 点源图取色（精灵图模式作用于聚焦图）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
-  - 功能向：聊天历史持久化展示（重启后载入最近对话）、SAD 等新状态专属动画。
+  - 功能向：SAD 等新状态专属动画。
   - 工程向：CI 跑 pytest、给 UIManager/AIService 补单测。
   - 小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
   - 美术：接入正式素材/Lottie 动画，替换占位帧。
@@ -71,7 +78,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 75 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 78 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -166,7 +173,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 75 passed）
+python -m pytest tests/ -q            # 回归测试（当前 78 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

@@ -1,18 +1,20 @@
 """宠物记忆系统模块。
 
-MemoryManager 负责维护两类记忆，均持久化到 data/memory.json：
+MemoryManager 维护两类记忆，均持久化到 data/memory.json：
 
-* 短期记忆（short_term）：最近若干轮对话（user/pet 文本对），
-  用于拼接进 Prompt，让 AI 了解最近的对话上下文。
-* 长期记忆（long_term）：重要事件记录（事件描述 + 时间 + 情绪），
-  用于让 AI "记住"用户的关键互动（如第一次喂食），
-  并据此调整长期反馈。
+* 短期记忆（short_term）：最近 SHORT_TERM_LIMIT 轮对话（user/pet 文本对），
+  提供给 Prompt 作为最近上下文。
+* 长期记忆（long_term）：用户习惯/偏好的摘要（由 AIService 定期用 LLM 从
+  对话中总结），以及少量重要事件（如第一次喂食），让 AI 长期"记住"主人。
 
 数据结构::
 
     {
         "short_term": [{"user": "...", "pet": "..."}],
-        "long_term": [{"event": "...", "time": "...", "emotion": "..."}]
+        "long_term": [
+            {"summary": "主人喜欢晚上聊天", "time": "..."},
+            {"event": "用户第一次喂食", "time": "...", "emotion": "happy"}
+        ]
     }
 """
 
@@ -25,19 +27,18 @@ from typing import Dict, List, Optional
 from config import settings
 from utils.helper import load_json, save_json
 
-# 短期记忆最多保留的对话轮数
-SHORT_TERM_LIMIT = 10
+# 短期记忆保留的对话轮数（仅保存最近三轮）
+SHORT_TERM_LIMIT = 3
 
-# 长期记忆最多保留的事件条数（Prompt 只取最近几条，超限丢弃最旧的）
+# 长期记忆最多保留的条数（习惯摘要 + 重要事件，超限丢弃最旧的）
 LONG_TERM_LIMIT = 100
 
-# 拼接进 Prompt 时取最近的对话轮数 / 长期事件条数
-_PROMPT_DIALOGUE_LIMIT = 5
-_PROMPT_EVENT_LIMIT = 5
+# 拼接进 Prompt 时取最近的长期记忆条数
+_PROMPT_LONG_TERM_LIMIT = 8
 
 
 class MemoryManager:
-    """管理宠物的短期对话记忆与长期事件记忆。"""
+    """管理宠物的短期对话记忆与长期习惯/事件记忆。"""
 
     def __init__(self, file_path: Optional[str] = None) -> None:
         self._file_path = file_path or settings.MEMORY_FILE
@@ -51,52 +52,68 @@ class MemoryManager:
         self.long_term: List[Dict[str, str]] = list(data.get("long_term", []))
 
     def add_dialogue(self, user_message: str, pet_reply: str) -> None:
-        """记录一轮对话，超过 SHORT_TERM_LIMIT 时丢弃最旧的记录。"""
+        """记录一轮对话，仅保留最近 SHORT_TERM_LIMIT 轮。"""
         with self._lock:
             self.short_term.append({"user": user_message, "pet": pet_reply})
             if len(self.short_term) > SHORT_TERM_LIMIT:
                 self.short_term = self.short_term[-SHORT_TERM_LIMIT:]
             self._save_locked()
 
+    def add_summary(self, summary: str) -> None:
+        """记录一条长期习惯/偏好摘要（带日期），超限丢弃最旧的。"""
+        summary = (summary or "").strip()
+        if not summary:
+            return
+        with self._lock:
+            self.long_term.append({
+                "summary": summary,
+                "time": datetime.now().strftime("%Y-%m-%d"),
+            })
+            self._trim_long_term_locked()
+            self._save_locked()
+
     def add_event(self, event: str, emotion: str = "") -> None:
-        """记录一条长期重要事件（带日期与情绪标签），超限丢弃最旧的。"""
+        """记录一条长期重要事件（带日期与情绪），超限丢弃最旧的。"""
         with self._lock:
             self.long_term.append({
                 "event": event,
                 "time": datetime.now().strftime("%Y-%m-%d"),
                 "emotion": emotion,
             })
-            if len(self.long_term) > LONG_TERM_LIMIT:
-                self.long_term = self.long_term[-LONG_TERM_LIMIT:]
+            self._trim_long_term_locked()
             self._save_locked()
 
     def recent_dialogues(self, limit: int = SHORT_TERM_LIMIT) -> List[Dict[str, str]]:
         """返回最近 limit 轮对话（按时间正序）。"""
         return self.short_term[-limit:]
 
-    def recent_events(self, limit: int = _PROMPT_EVENT_LIMIT) -> List[Dict[str, str]]:
-        """返回最近 limit 条长期事件（按时间正序）。"""
-        return self.long_term[-limit:]
-
     def describe(self) -> str:
         """生成一段用于拼接进 Prompt 的记忆摘要文字。"""
         lines: List[str] = []
 
-        for item in self.recent_dialogues(_PROMPT_DIALOGUE_LIMIT):
-            lines.append(f"主人说：{item['user']} / 你回复：{item['pet']}")
+        for item in self.long_term[-_PROMPT_LONG_TERM_LIMIT:]:
+            if "summary" in item:
+                lines.append(f"[长期记忆] {item['summary']}")
+            elif "event" in item:
+                emotion = item.get("emotion", "")
+                suffix = f"（情绪：{emotion}）" if emotion else ""
+                lines.append(f"[重要事件] {item.get('time', '')} {item['event']}{suffix}")
 
-        for item in self.recent_events(_PROMPT_EVENT_LIMIT):
-            lines.append(f"[历史事件] {item['time']} {item['event']}（情绪：{item['emotion']}）")
+        for item in self.recent_dialogues():
+            lines.append(f"主人说：{item['user']} / 你回复：{item['pet']}")
 
         if not lines:
             return "（暂无历史记忆）"
-
         return "\n".join(lines)
 
     def save(self) -> None:
         """将当前记忆数据写回 data/memory.json（线程安全）。"""
         with self._lock:
             self._save_locked()
+
+    def _trim_long_term_locked(self) -> None:
+        if len(self.long_term) > LONG_TERM_LIMIT:
+            self.long_term = self.long_term[-LONG_TERM_LIMIT:]
 
     def _save_locked(self) -> None:
         """实际执行文件写入，调用方必须已持有 self._lock。"""
