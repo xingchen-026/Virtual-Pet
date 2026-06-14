@@ -37,6 +37,10 @@ class MovementController:
         # 使宠物不会漫游到屏幕边缘导致窗口（及右键面板）跑出屏幕外。
         self.inset: Tuple[int, int] = (0, 0)
 
+        # 电子围栏：(x1, y1, x2, y2)，与 bounds 同坐标系。设定后随机漫游
+        # 目标被限制在围栏与安全区间的交集内（见 pick_random_target）。
+        self.fence: Optional[Tuple[int, int, int, int]] = None
+
         # 移动过程中的浮点坐标。Pet.position 为整数坐标（供 Sprite/Rect 使用），
         # 若每帧都从中读回作为移动起点，低速移动时的小数步长会被舍入吞掉，
         # 导致位置卡死不再前进。移动期间改为维护此浮点坐标作为唯一来源。
@@ -56,15 +60,45 @@ class MovementController:
         self.bounds = (width, height)
         self.inset = inset
 
+    def set_fence(self, fence: Tuple[int, int, int, int]) -> None:
+        """设置电子围栏，限定随机漫游范围（坐标系与 bounds 一致）。"""
+        self.fence = fence
+
+    def clear_fence(self) -> None:
+        """清除电子围栏，恢复在整个 bounds 内漫游。"""
+        self.fence = None
+
+    def set_target(self, point: Tuple[int, int], speed: float) -> None:
+        """设置一个显式移动目标（如走向放下的食物），按 speed 平滑移动。
+
+        与 pick_random_target 不同，本方法直接指定目标、不受围栏约束
+        （食物位置由用户放置，已在放置时受围栏限制）。
+        """
+        self.target = (float(point[0]), float(point[1]))
+        self.speed = speed
+        self._float_position = (float(self.pet.position[0]), float(self.pet.position[1]))
+
     def pick_random_target(self, speed: float) -> Tuple[float, float]:
         """在漫游范围内随机选取一个目标位置，并设置移动速度。
 
         范围会同时考虑 movement_margin 与 inset（半窗口），
         并对内缩后区间做钳制，避免屏幕过小时上下限反转。
+        设有围栏时，进一步把范围夹到围栏与安全区间的交集内
+        （围栏过小或贴屏幕边时 _random_in_range 返回区间中点，仍落在围栏内）。
         """
         margin = self.config["movement_margin"]
-        x = self._random_in_range(self.inset[0] + margin, self.bounds[0] - self.inset[0] - margin)
-        y = self._random_in_range(self.inset[1] + margin, self.bounds[1] - self.inset[1] - margin)
+        low_x = self.inset[0] + margin
+        high_x = self.bounds[0] - self.inset[0] - margin
+        low_y = self.inset[1] + margin
+        high_y = self.bounds[1] - self.inset[1] - margin
+
+        if self.fence is not None:
+            fx1, fy1, fx2, fy2 = self.fence
+            low_x, high_x = max(low_x, fx1), min(high_x, fx2)
+            low_y, high_y = max(low_y, fy1), min(high_y, fy2)
+
+        x = self._random_in_range(low_x, high_x)
+        y = self._random_in_range(low_y, high_y)
 
         self.target = (x, y)
         self.speed = speed

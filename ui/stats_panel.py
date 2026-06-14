@@ -27,7 +27,7 @@ TITLE_TEXT = "宠物状态"
 # 的值一致，UIManager 据此通用分发；chat/settings 为界面动作。
 BUTTON_ROWS = [
     [("喂食", "feed"), ("玩耍", "play"), ("洗澡", "bath")],
-    [("睡觉", "sleep"), ("礼物", "gift")],
+    [("睡觉", "sleep"), ("礼物", "gift"), ("围栏", "fence")],
     [("皮肤", "skin"), ("聊天", "chat"), ("设置", "settings")],
 ]
 
@@ -77,11 +77,14 @@ class StatsPanel:
         surface: pygame.Surface,
         anchor_rect: pygame.Rect,
         lines: List[str],
+        force_topleft: Optional[Tuple[int, int]] = None,
     ) -> None:
         """在宠物旁边绘制面板。
 
         anchor_rect: 宠物精灵的矩形，面板优先显示在其右侧，
         放不下时翻到左侧，并整体限制在窗口范围内。
+        force_topleft: 设围栏后由 UIManager 传入的统一基点左上角，
+        非 None 时改用该位置（仍夹取到窗口范围内），使面板与其它弹窗统一定位。
         """
         if not self.visible or not lines:
             return
@@ -92,7 +95,12 @@ class StatsPanel:
         buttons_height = len(BUTTON_ROWS) * (BUTTON_HEIGHT + BUTTON_GAP) - BUTTON_GAP
         height = (len(lines) + 1) * line_height + buttons_height + 3 * padding
 
-        x, y = self._panel_position(surface, anchor_rect, width, height)
+        if force_topleft is not None:
+            screen_rect = surface.get_rect()
+            x = max(0, min(force_topleft[0], screen_rect.right - width))
+            y = max(0, min(force_topleft[1], screen_rect.bottom - height))
+        else:
+            x, y = self._panel_position(surface, anchor_rect, width, height)
         self._panel_rect = pygame.Rect(x, y, width, height)
 
         panel = theme.make_panel((width, height))

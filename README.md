@@ -37,7 +37,8 @@ VirtualPet/
 │   ├── interaction.py         # 用户交互管理（点击 / 拖拽 / 按键）
 │   ├── action.py              # 宠物行为动作与 BehaviorManager
 │   ├── food.py                # 食物数据结构（喂食系统）
-│   ├── feedback.py            # 交互提示 UI（自动消失的提示文字）
+│   ├── feeding.py             # 喂食放置状态机（放置模式 / 已放下食物）
+│   ├── fence.py               # 电子围栏取点状态机 + 弹窗统一定位布局
 │   ├── desktop.py             # 桌面窗口能力（透明 / 置顶 / 隐藏 / 移动）
 │   └── ai/
 │       ├── llm_client.py       # LLM 接口封装（OpenAI / DeepSeek / 本地）
@@ -53,7 +54,8 @@ VirtualPet/
 │   ├── message_box.py        # 聊天消息气泡渲染
 │   ├── speech_bubble.py      # 宠物头顶临时提示气泡（休息提醒）
 │   ├── stats_panel.py        # 右键数值信息与功能按钮面板
-│   ├── settings_window.py    # 设置窗口（名称/性格/语气/大小/提醒间隔/AI 配置）
+│   ├── food_icon.py          # 程序化食物图标（放置模式跟随鼠标/已放下渲染）
+│   ├── settings_window.py    # 设置窗口（名称/性格/语气/大小/提醒间隔/AI 配置/保存退出）
 │   ├── skin_window.py        # 皮肤选择窗口（缩略图预览选择）
 │   └── skin_creator.py       # 创建皮肤窗口（精灵图/按状态 + 镜像/抠图/速度）
 │
@@ -119,8 +121,14 @@ VirtualPet/
 
    - 按 `C` 打开/关闭 AI 对话窗口，输入文字后按 `Enter` 发送，`Esc` 关闭窗口。
    - 右键宠物弹出状态面板：查看数值信息（养成动作后的属性变化以 +xx
-     形式显示在对应属性后），点击 `喂食` / `玩耍` / `洗澡` / `睡觉` / `礼物`
-     养成按钮与 `聊天` / `设置` 按钮交互。
+     形式显示在对应属性后），点击 `玩耍` / `洗澡` / `睡觉` / `礼物`
+     养成按钮与 `围栏` / `皮肤` / `聊天` / `设置` 按钮交互。
+   - **喂食（放置模式）**：点 `喂食` 后食物图标跟随鼠标，**左键放下**食物、**右键取消**；
+     放下后宠物自主走过去吃掉（恢复饥饿/心情）。设了围栏时只能在围栏内放置，鼠标移出围栏自动取消。
+   - **电子围栏**：点 `围栏` 记下宠物当前位置为一角，把宠物拖到对角再点一次 `围栏` 即设定矩形，
+     宠物只在该区域内自主漫游；已有围栏时再点 `围栏` 清除。围栏存盘，重启保留。
+     设围栏后所有弹窗（设置/状态/聊天/皮肤）统一锚定到围栏上边一侧，避免鼠标来回移动。
+   - **设置窗口「保存并退出」**：保存全部设置与游戏数据后关闭进程。
    - 右键面板「皮肤」按钮打开皮肤选择窗口，点击缩略图预览即时切换皮肤（无需重启）。
    - 皮肤选择窗口显示每个皮肤的缺失状态；非默认皮肤可点「补充动画」按状态补齐缺失动画
      （合并保留已有状态）。右下角「创建皮肤」打开制作窗口，支持两种方式：①精灵图——
@@ -309,6 +317,29 @@ Linux + Python 3.12 上自动运行全部测试。CI 仅装测试所需依赖
 - 数值面板「时间」改为系统真实时间（不再显示模拟昼夜时刻）
 - 全部界面窗口/面板改为圆角：`ui/theme.py` 新增 `make_panel()`（SRCALPHA + 圆角
   背景/边框），数值面板/聊天/设置/皮肤选择/创建皮肤窗口统一改用
+
+**工程化收尾（计时器聚合 + 单测）**
+
+- 新增 `utils/timer.py` 的 `IntervalTimer`，聚合自动存档 / 窗口置顶维持 / 休息提醒
+  三处重复的计时逻辑；`Game._save_pet_data()` 统一存档出口
+- 补 `tests/`：`test_timer` / `test_ai_service`（FakeLLM + tmp 路径隔离）/
+  `test_ui_manager`（font=None + tmp CHAT_HISTORY 免渲染免污染）
+
+**第九阶段：电子围栏 / 喂食放置 / 保存退出**
+
+- 电子围栏（`core/fence.py` + `core/movement.py`）：右键面板 `围栏` 按钮拖窗两点定角
+  （点一次记宠物当前位置为一角、拖到对角再点定矩形，已有围栏时再点清除）；
+  `MovementController.set_fence/clear_fence` 把随机漫游夹到围栏内；围栏存
+  `config/user_config.json`，重启保留
+- 喂食放置模式（`core/feeding.py` + `ui/food_icon.py` + `core/autonomous.py`）：点 `喂食`
+  进入放置模式，程序化苹果图标跟随鼠标，左键放下、右键取消、移出围栏自动取消；
+  `AutonomousManager.food_target` 以最高优先级寻路，到达触发 `on_food_reached` 复用既有
+  喂食管线（FeedAction + eating 动画 + 属性增量 + 记忆联动）
+- 设置窗口「保存并退出」按钮：应用全部设置后请求退出，退出时统一存档宠物数据与偏好
+- 设围栏后弹窗统一定位（`fence.popup_topleft` + `UIManager._anchored_rect` +
+  `StatsPanel.draw(force_topleft=)`）：设置/状态/聊天/皮肤以围栏上边两角为基点、
+  选能完整显示的一侧整体展示，避免鼠标来回移动
+- `tests/`：`test_fence` / `test_feeding` / `test_movement` / `test_autonomous_food`
 
 ## 后续开发计划
 

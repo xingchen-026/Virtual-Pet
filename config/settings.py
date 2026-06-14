@@ -208,9 +208,9 @@ CHAT_WINDOW_MARGIN = 20
 CHAT_WINDOW_WIDTH = 280
 CHAT_WINDOW_HEIGHT = 420
 
-# 设置窗口尺寸（靠右侧停靠，垂直居中）
+# 设置窗口尺寸（靠右侧停靠，垂直居中）。高度容纳「保存并退出」按钮行
 SETTINGS_WINDOW_WIDTH = 280
-SETTINGS_WINDOW_HEIGHT = 480
+SETTINGS_WINDOW_HEIGHT = 520
 
 # 皮肤选择窗口尺寸（靠右侧停靠，垂直居中；缩略图预览选择 + 缺失状态提示）
 SKIN_WINDOW_WIDTH = 300
@@ -238,3 +238,15 @@ REST_REMINDER_MESSAGES = [
     "记得按时休息哦，伸个懒腰，放松一下肩颈~",
     "工作再忙也要照顾好自己，陪我走两步好不好？",
 ]
+
+# ----- 电子围栏配置 -----
+# 围栏取点（拖窗两点定角）各阶段在宠物头顶弹出的提示气泡文案
+FENCE_MESSAGES = {
+    "first_corner": "记下这个角啦~ 把我拖到对角再点一次「围栏」吧！",
+    "set": "围栏设定完成，我会乖乖待在这块区域里活动哦~",
+    "cleared": "围栏已清除，我又能到处溜达啦！",
+}
+
+# ----- 喂食放置配置 -----
+# 食物图标（程序化苹果）的半径（像素）
+FOOD_ICON_RADIUS = 14

@@ -67,14 +67,18 @@ from core.autonomous import AutonomousManager
 from core.behavior import PetBehavior
 from core.desktop import DesktopManager
 from core.event import InteractionEvent, InteractionEventType
+from core.feeding import FeedingController
+from core.fence import FenceController, popup_topleft
 from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
 from core.skin import SkinManager
 from core.sprite import PetSprite
 from core.window_controller import WindowController
+from ui import food_icon
 from ui.ui_manager import UIManager
 from utils.behavior_logger import BehaviorLogger
+from utils.exception import AIServiceError, log_exception
 from utils.helper import load_json, save_json
 from utils.timer import IntervalTimer
 from utils.tray import TrayIcon
@@ -140,6 +144,11 @@ class Game:
             self.pet, self.behavior, behavior_config, self.behavior_logger
         )
 
+        # 电子围栏与喂食放置控制器（纯状态机），由 Game 编排接入移动/事件/渲染
+        self.fence_controller = FenceController()
+        self.feeding = FeedingController()
+        self.autonomous_manager.on_food_reached = self._on_food_reached
+
         # 用户偏好（宠物大小、窗口位置等），整局共用一份，退出时合并写回
         self.user_config = load_json(settings.USER_CONFIG_FILE) or {}
 
@@ -155,6 +164,12 @@ class Game:
             self.autonomous_manager.movement.set_bounds(
                 *self.desktop_manager.get_screen_size(), inset=self.window.center
             )
+
+        # 恢复上次保存的电子围栏，限定自主漫游范围
+        saved_fence = self.user_config.get("fence")
+        if saved_fence:
+            self.fence_controller.fence = tuple(saved_fence)
+            self.autonomous_manager.movement.set_fence(tuple(saved_fence))
 
         # 界面字体：必须使用含中文字形的系统字体（settings.UI_FONT_NAMES），
         # 否则聊天窗口/面板中的中文会渲染为方块乱码
@@ -191,6 +206,10 @@ class Game:
             reminder_interval_minutes=self.user_config.get(
                 "reminder_interval_minutes", settings.REST_REMINDER_INTERVAL_MINUTES
             ),
+            on_feed_place_start=self._start_feed_placement,
+            on_fence_toggle=self._toggle_fence,
+            on_quit=self._request_quit,
+            popup_anchor=self._popup_topleft,
         )
 
         # 系统托盘：菜单回调在后台线程执行，仅将动作放入队列，主循环统一处理
@@ -311,6 +330,7 @@ class Game:
             self.interaction_manager.dragging
             or self.ui.is_active
             or self.autonomous_manager.movement.has_target()
+            or self.feeding.placing
         )
         return settings.FPS if active else settings.IDLE_FPS
 
@@ -324,6 +344,10 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+                continue
+
+            # 喂食放置模式：左键放下/右键取消/移出围栏自动取消，优先消化
+            if self.feeding.placing and self._handle_feed_placement(event):
                 continue
 
             if self.ui.handle_event(event):
@@ -387,6 +411,73 @@ class Game:
 
         self.ai_service.notify_interaction(self.pet, interaction_event.type.value)
 
+    # ----- 喂食放置 -----
+
+    def _to_screen(self, pos):
+        """把窗口内坐标换算为与 Pet.position 一致的坐标（跟随模式下为屏幕坐标）。"""
+        return (self.window.window_pos[0] + pos[0], self.window.window_pos[1] + pos[1])
+
+    def _start_feed_placement(self) -> None:
+        """进入喂食放置模式（食物图标开始跟随鼠标）。"""
+        self.feeding.start_placing()
+
+    def _handle_feed_placement(self, event) -> bool:
+        """放置模式下的鼠标事件：左键放下、右键取消、移出围栏自动取消。
+
+        返回 True 表示已消化（主循环不再交给界面/交互系统处理）。
+        """
+        if event.type == pygame.MOUSEMOTION:
+            if not self.fence_controller.contains(self._to_screen(event.pos)):
+                self.feeding.cancel_placing()
+            return True
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            screen = self._to_screen(event.pos)
+            if self.fence_controller.contains(screen):
+                self.feeding.place(screen)
+                self.autonomous_manager.food_target = screen
+                if self.behavior.is_sleeping:
+                    self.behavior.stop_sleep()
+            else:
+                self.feeding.cancel_placing()
+            return True
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+            self.feeding.cancel_placing()
+            return True
+
+        return False
+
+    def _on_food_reached(self) -> None:
+        """宠物走到食物处：复用喂食交互管线吃掉食物，并清除食物。"""
+        self._dispatch_interaction(InteractionEvent(type=InteractionEventType.FEED))
+        self.feeding.clear_food()
+
+    # ----- 电子围栏 -----
+
+    def _toggle_fence(self) -> None:
+        """处理面板「围栏」点击：取点/设定/清除，应用到漫游范围、持久化并提示。"""
+        status = self.fence_controller.toggle(self.pet.position)
+        if status == "set":
+            self.autonomous_manager.movement.set_fence(self.fence_controller.fence)
+        elif status == "cleared":
+            self.autonomous_manager.movement.clear_fence()
+        self._save_user_config()
+        self.ui.show_bubble(settings.FENCE_MESSAGES[status])
+
+    def _popup_topleft(self, popup_size):
+        """设围栏后弹窗统一锚点（窗口画布坐标）；无围栏返回 None 沿用默认停靠。"""
+        return popup_topleft(
+            self.fence_controller.fence,
+            self.window.window_pos,
+            (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT),
+            popup_size,
+        )
+
+    def _request_quit(self) -> None:
+        """请求退出主循环（设置窗口「保存并退出」触发，退出时统一存档）。"""
+        self.running = False
+
     def _update(self, dt: float):
         """逐帧更新逻辑：处理托盘动作、界面异步结果、宠物行为/自主行为/动画。"""
         self._process_tray_actions()
@@ -397,11 +488,12 @@ class Game:
         self.behavior.update(dt, moving)
         # 以下情况暂停自主行为（宠物停在原地，窗口保持静止）：
         # 拖拽中、聊天/设置窗口打开、睡眠模式、危急状态（饥饿/体力归零）。
+        # 例外：已放下食物时即使危急也要让宠物走过去吃，故危急豁免。
         interaction_active = (
             self.interaction_manager.dragging
             or self.ui.blocks_autonomous
             or self.behavior.is_sleeping
-            or self.behavior.is_critical
+            or (self.behavior.is_critical and not self.feeding.has_food)
         )
         self.autonomous_manager.update(dt, interaction_active)
         self.window.sync_to_pet()
@@ -426,6 +518,8 @@ class Game:
         """
         self.user_config["pet_scale"] = self.pet_sprite.scale
         self.user_config["reminder_interval_minutes"] = self.ui.reminder_interval_minutes
+        fence = self.fence_controller.fence
+        self.user_config["fence"] = list(fence) if fence else None
         if self.window.supported:
             self.user_config["window_position"] = list(self.window.window_pos)
         save_json(settings.USER_CONFIG_FILE, self.user_config)
@@ -459,8 +553,19 @@ class Game:
 
         self.screen.fill(background_color)
         self.pet_sprite.draw(self.screen)
+        self._draw_food(self.screen)
         self.ui.draw(self.screen)
         pygame.display.flip()
+
+    def _draw_food(self, screen) -> None:
+        """绘制食物图标：放置模式下跟随鼠标；已放下时固定在其屏幕位置。"""
+        if self.feeding.placing:
+            food_icon.draw_food(screen, pygame.mouse.get_pos())
+        elif self.feeding.has_food:
+            fx, fy = self.feeding.food_position
+            food_icon.draw_food(
+                screen, (fx - self.window.window_pos[0], fy - self.window.window_pos[1])
+            )
 
     def _quit(self):
         """停止系统托盘、保存宠物数据与用户偏好并安全退出 Pygame 与程序。"""

@@ -164,6 +164,8 @@ class SettingsWindow:
                 pygame.key.set_text_input_rect(rect)
             elif name == "save":
                 return self._save()
+            elif name == "save_exit":
+                return self._save_exit()
             elif name == "test":
                 return {"action": "test", "ai_config": self._collect_ai_config()}
             elif name == "close":
@@ -218,8 +220,16 @@ class SettingsWindow:
 
     def _save(self) -> dict:
         self.visible = False
+        return self._result("save")
+
+    def _save_exit(self) -> dict:
+        """保存当前编辑值并请求退出（字段同 _save，仅 action 不同）。"""
+        self.visible = False
+        return self._result("save_exit")
+
+    def _result(self, action: str) -> dict:
         return {
-            "action": "save",
+            "action": action,
             "name": self.name.strip(),
             "character": self.character.strip(),
             "tone": self.tone.strip(),
@@ -407,6 +417,7 @@ class SettingsWindow:
             panel.blit(text, (PADDING, y + 4 + index * self.font.get_linesize()))
 
     def _draw_bottom_buttons(self, panel: pygame.Surface) -> None:
+        # 底行：保存 / 测试 / 关闭
         buttons = (("save", "保存"), ("test", "测试"), ("close", "关闭"))
         button_width = (self.rect.width - (len(buttons) + 1) * PADDING) // len(buttons)
         y = self.rect.height - BUTTON_HEIGHT - PADDING
@@ -420,3 +431,14 @@ class SettingsWindow:
             glyph = self.font.render(text, True, theme.BUTTON_TEXT_COLOR)
             panel.blit(glyph, glyph.get_rect(center=rect.center))
             self._hit_areas[name] = rect
+
+        # 底行上方：整宽「保存并退出」按钮（保存数据后关闭进程）
+        exit_rect = pygame.Rect(
+            PADDING, y - BUTTON_HEIGHT - PADDING,
+            self.rect.width - 2 * PADDING, BUTTON_HEIGHT,
+        )
+        pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, exit_rect, border_radius=6)
+        pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, exit_rect, 1, border_radius=6)
+        exit_glyph = self.font.render("保存并退出", True, theme.BUTTON_TEXT_COLOR)
+        panel.blit(exit_glyph, exit_glyph.get_rect(center=exit_rect.center))
+        self._hit_areas["save_exit"] = exit_rect

@@ -21,7 +21,7 @@ Game 主循环每帧只需调用一次 AutonomousManager.update()，
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 from config import settings
 from core.behavior import PetBehavior
@@ -88,6 +88,11 @@ class AutonomousManager:
         self._current_behavior = AutonomousBehavior.IDLE
         self._last_logged_behavior: Optional[AutonomousBehavior] = None
 
+        # 用户放下的食物位置（坐标系同 Pet.position）。非 None 时优先于随机
+        # 漫游：宠物走向食物，到达后调用 on_food_reached（由 Game 接入喂食管线）。
+        self.food_target: Optional[Tuple[int, int]] = None
+        self.on_food_reached: Optional[Callable[[], None]] = None
+
     def update(self, dt: float, interaction_active: bool) -> None:
         """每帧调用一次。
 
@@ -100,6 +105,11 @@ class AutonomousManager:
         if interaction_active:
             self.movement.clear_target()
             self._idle_timer = 0.0
+            return
+
+        # 食物寻路优先于随机漫游：走向用户放下的食物，到达即触发喂食回调
+        if self.food_target is not None:
+            self._seek_food(dt)
             return
 
         if self.movement.has_target():
@@ -116,6 +126,21 @@ class AutonomousManager:
         self._idle_timer = 0.0
         decision = self.behavior_tree.decide(self.pet, self.schedule.is_night())
         self._execute(decision)
+
+    def _seek_food(self, dt: float) -> None:
+        """走向已放下的食物，到达后清除目标并触发喂食回调。"""
+        if not self.movement.has_target():
+            speed = self.config["walk_speed"] * self.config["hungry_speed_multiplier"]
+            self.movement.set_target(self.food_target, speed)
+            self.pet.change_animation("hungry")
+            self._current_behavior = AutonomousBehavior.SEEK_FOOD
+
+        if self.movement.update(dt):
+            self.food_target = None
+            self.pet_behavior.sync_to_state_animation()
+            self._current_behavior = AutonomousBehavior.IDLE
+            if self.on_food_reached is not None:
+                self.on_food_reached()
 
     @property
     def current_behavior(self) -> AutonomousBehavior:

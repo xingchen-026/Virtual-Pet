@@ -24,7 +24,7 @@ import datetime
 import queue
 import random
 import threading
-from typing import Callable, List
+from typing import Callable, List, Optional, Tuple
 
 import pygame
 
@@ -83,6 +83,10 @@ class UIManager:
         on_skin_change: Callable[[str], None] = None,
         on_skin_create: Callable[[dict], tuple] = None,
         reminder_interval_minutes: float = settings.REST_REMINDER_INTERVAL_MINUTES,
+        on_feed_place_start: Callable[[], None] = None,
+        on_fence_toggle: Callable[[], None] = None,
+        on_quit: Callable[[], None] = None,
+        popup_anchor: Callable[[Tuple[int, int]], Optional[Tuple[int, int]]] = None,
     ) -> None:
         self.font = font
         self.pet = pet
@@ -96,6 +100,10 @@ class UIManager:
         self._on_user_prefs_changed = on_user_prefs_changed
         self._on_skin_change = on_skin_change
         self._on_skin_create = on_skin_create
+        self._on_feed_place_start = on_feed_place_start
+        self._on_fence_toggle = on_fence_toggle
+        self._on_quit = on_quit
+        self._popup_anchor = popup_anchor
 
         # 数值信息面板：右键点击宠物弹出/关闭
         self.stats_panel = StatsPanel(font)
@@ -149,6 +157,13 @@ class UIManager:
         )
         self.chat_window = ChatWindow(font, chat_rect, pet_name=self.pet_name())
         self._ai_replies: "queue.Queue[str]" = queue.Queue()
+
+        # 各弹窗的默认停靠矩形。设围栏后弹窗统一锚定到围栏上边（见 _anchored_rect），
+        # 无围栏时回退到这些默认位置。
+        self._default_settings_rect = settings_rect.copy()
+        self._default_skin_rect = skin_rect.copy()
+        self._default_creator_rect = creator_rect.copy()
+        self._default_chat_rect = chat_rect.copy()
 
         # 聊天历史持久化：启动时把上次的可见对话回填到聊天窗口（与 AI 记忆分离）
         self._chat_history: list = load_json(settings.CHAT_HISTORY_FILE) or []
@@ -219,6 +234,7 @@ class UIManager:
         # 聊天开关键（仅在聊天窗口关闭时响应）
         if event.type == pygame.KEYDOWN and not self.chat_window.visible:
             if pygame.key.name(event.key) == settings.CHAT_TOGGLE_KEY:
+                self.chat_window.rect = self._anchored_rect(self._default_chat_rect)
                 self.chat_window.toggle()
                 self.desktop_manager.focus()
                 return True
@@ -257,12 +273,28 @@ class UIManager:
         Game 的交互管线；chat/settings 为界面动作，在此直接处理。
         新增养成按钮无需改动本方法。
         """
+        # 喂食改为放置模式：进入后由 Game 处理鼠标放置/取消（见 _handle_feed_placement）
+        if action == "feed":
+            self.stats_panel.hide()
+            if self._on_feed_place_start is not None:
+                self._on_feed_place_start()
+            return
+
+        # 围栏：取点/设定/清除由 Game 编排，状态用头顶气泡反馈
+        if action == "fence":
+            self.stats_panel.hide()
+            if self._on_fence_toggle is not None:
+                self._on_fence_toggle()
+            return
+
         event_type = _PANEL_INTERACTION_TYPES.get(action)
         if event_type is not None:
             self._on_interaction(InteractionEvent(type=event_type))
             return
 
         if action == "chat":
+            if not self.chat_window.visible:
+                self.chat_window.rect = self._anchored_rect(self._default_chat_rect)
             self.chat_window.toggle()
             self.stats_panel.hide()
             if self.chat_window.visible:
@@ -271,6 +303,7 @@ class UIManager:
             self._open_skin_window()
         elif action == "settings":
             personality = self.ai_service.personality
+            self.settings_window.rect = self._anchored_rect(self._default_settings_rect)
             self.settings_window.open(
                 self.pet_sprite.scale, personality.name,
                 personality.character, personality.tone, self.ai_config,
@@ -286,9 +319,23 @@ class UIManager:
         skins = self.skin_manager.available_skins()
         items = [(name, self.skin_manager.preview_path(name)) for name in skins]
         missing_map = {name: self.skin_manager.missing_states(name) for name in skins}
+        self.skin_window.rect = self._anchored_rect(self._default_skin_rect)
         self.skin_window.open(items, self.skin_manager.active_skin, missing_map)
         self.stats_panel.hide()
         self.desktop_manager.focus()
+
+    def show_bubble(self, text: str) -> None:
+        """在宠物头顶弹出一条提示气泡（围栏取点/设定等状态反馈）。"""
+        self.speech_bubble.show(text, settings.REST_REMINDER_BUBBLE_DURATION)
+
+    def _anchored_rect(self, default_rect: pygame.Rect) -> pygame.Rect:
+        """弹窗矩形：设围栏时锚定到围栏上边统一基点，否则用默认停靠位置。"""
+        if self._popup_anchor is None:
+            return default_rect.copy()
+        anchor = self._popup_anchor((default_rect.width, default_rect.height))
+        if anchor is None:
+            return default_rect.copy()
+        return pygame.Rect(anchor[0], anchor[1], default_rect.width, default_rect.height)
 
     def _handle_skin_result(self, result: tuple) -> None:
         """处理皮肤选择窗口的结果：选择切换 / 创建 / 补充缺失动画。"""
@@ -300,11 +347,13 @@ class UIManager:
         elif action == "create":
             # 打开创建皮肤窗口（皮肤选择窗口暂时关闭，创建完成后可重新打开查看）
             self.skin_window.close()
+            self.skin_creator.rect = self._anchored_rect(self._default_creator_rect)
             self.skin_creator.open()
             self.desktop_manager.focus()
         elif action == "supplement":
             # 补充已有皮肤的缺失动画：按状态上传，高亮缺失项
             self.skin_window.close()
+            self.skin_creator.rect = self._anchored_rect(self._default_creator_rect)
             self.skin_creator.open(
                 name=value, mode="states", highlight_states=self.skin_manager.missing_states(value)
             )
@@ -327,36 +376,45 @@ class UIManager:
     # ----- 设置窗口结果 -----
 
     def _handle_settings_result(self, result: dict) -> None:
-        """应用设置窗口的保存/测试结果。"""
-        if result.get("action") == "test":
+        """应用设置窗口的保存/测试/保存退出结果。"""
+        action = result.get("action")
+        if action == "test":
             self._test_ai_config(result["ai_config"])
             return
 
-        if result.get("action") == "save":
-            self.pet_sprite.scale = result["pet_scale"]
-            self.reminder_interval_minutes = result["reminder_interval"]
-            # 间隔变更后按新间隔重新计时
-            self._rest_timer.interval = self._reminder_seconds()
-            self._rest_timer.reset()
-            self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒间隔）
-
-            # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格
-            personality = self.ai_service.personality
-            name = result["name"] or personality.name
-            self.pet.set_name(name)
-            personality.name = name
-            personality.character = result["character"]
-            personality.tone = result["tone"]
-            personality.save()
-            self.chat_window.pet_name = name
-
-            self.ai_config.update(result["ai_config"])
-            save_ai_config(self.ai_config)
-            self.ai_service.apply_config(self.ai_config)
+        if action in ("save", "save_exit"):
+            self._apply_save(result)
 
         # 设置窗口已关闭：聊天窗口未打开时停用文本输入
         if not self.chat_window.visible:
             pygame.key.stop_text_input()
+
+        # 保存并退出：应用保存后请求 Game 退出（退出时统一存档宠物数据/偏好）
+        if action == "save_exit" and self._on_quit is not None:
+            self._on_quit()
+
+    def _apply_save(self, result: dict) -> None:
+        """应用设置窗口「保存」的各项编辑值并持久化（save / save_exit 共用）。"""
+        self.pet_sprite.scale = result["pet_scale"]
+        self.reminder_interval_minutes = result["reminder_interval"]
+        # 间隔变更后按新间隔重新计时
+        self._rest_timer.interval = self._reminder_seconds()
+        self._rest_timer.reset()
+        self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒间隔）
+
+        # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格
+        personality = self.ai_service.personality
+        name = result["name"] or personality.name
+        self.pet.set_name(name)
+        personality.name = name
+        personality.character = result["character"]
+        personality.tone = result["tone"]
+        personality.save()
+        self.chat_window.pet_name = name
+
+        self.ai_config.update(result["ai_config"])
+        save_ai_config(self.ai_config)
+        self.ai_service.apply_config(self.ai_config)
 
     def _test_ai_config(self, partial_config: dict) -> None:
         """在后台线程中用设置窗口的当前编辑值测试 LLM 连接。"""
@@ -475,7 +533,13 @@ class UIManager:
 
     def draw(self, screen: pygame.Surface) -> None:
         """绘制数值面板 / 聊天窗口 / 设置窗口（在宠物精灵之上）。"""
-        self.stats_panel.draw(screen, self.pet_sprite.rect, self._stats_lines())
+        # 设围栏后数值面板也走统一基点（左上角对齐围栏上边），否则贴宠物显示
+        force = None
+        if self._popup_anchor is not None:
+            force = self._popup_anchor((settings.STATS_PANEL_WIDTH, settings.STATS_PANEL_WIDTH))
+        self.stats_panel.draw(
+            screen, self.pet_sprite.rect, self._stats_lines(), force_topleft=force
+        )
         self.speech_bubble.draw(screen, self.pet_sprite.rect)
         self.chat_window.draw(screen)
         self.settings_window.draw(screen)
