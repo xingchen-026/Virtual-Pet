@@ -28,7 +28,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：**体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（五项需求一次性完成）：
+- **最近一次完成**（`7a2ceb1`，已 push）：**体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（五项需求一次性完成）：
   ①体力仅移动时缓慢消耗、静止缓慢回升（`ENERGY_REGEN_PER_TICK`）、睡觉回升更快；
   `Game._update` 把 `moving=movement.has_target()` 传入 `PetBehavior.update(dt, moving)`。
   ②自主 SLEEP 改为进入持续睡眠恢复体力（体力满时仅小憩防夜晚抖动，`AutonomousManager._start_sleep`）。
@@ -79,7 +79,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
-- **体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（用户需求，本轮）：
+- **体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（`7a2ceb1`）：
   ①体力仅移动时缓慢消耗、静止缓慢回升、睡觉回升更快（`ENERGY_REGEN_PER_TICK`；
   `Game` 把 `moving=movement.has_target()` 传入 `PetBehavior.update`）；
   ②自主行为 SLEEP 改为进入持续睡眠恢复体力，体力满时仅小憩防夜晚抖动
