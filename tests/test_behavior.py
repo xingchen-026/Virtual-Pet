@@ -44,6 +44,20 @@ def test_stop_sleep_clears_flag():
     assert pet.current_animation != "sleep"
 
 
+def test_energy_drains_only_while_moving():
+    # 移动中：体力按 ENERGY_DECAY_PER_TICK 缓慢下降
+    behavior, pet = _behavior(energy=50)
+    behavior.update(settings.ATTRIBUTE_DECAY_INTERVAL, moving=True)
+    assert pet.energy == 50 - settings.ENERGY_DECAY_PER_TICK
+
+
+def test_energy_regens_while_idle():
+    # 静止（非睡眠）：体力按 ENERGY_REGEN_PER_TICK 缓慢回升
+    behavior, pet = _behavior(energy=50)
+    behavior.update(settings.ATTRIBUTE_DECAY_INTERVAL, moving=False)
+    assert pet.energy == 50 + settings.ENERGY_REGEN_PER_TICK
+
+
 def test_is_critical_when_hunger_zero():
     behavior, pet = _behavior(hunger=0)
     assert behavior.is_critical

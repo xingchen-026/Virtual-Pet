@@ -438,9 +438,7 @@ class SkinCreator:
             return
         self._hit = {}
         self._row_hit = []
-        panel = pygame.Surface(self.rect.size)
-        panel.fill(theme.PANEL_BG_COLOR)
-        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
+        panel = theme.make_panel(self.rect.size)
 
         title = self.font.render("创建皮肤 (Esc 取消)", True, theme.TITLE_COLOR)
         panel.blit(title, (PADDING, PADDING))

@@ -35,6 +35,10 @@ class PetBehavior:
         self.pet = pet
         self._elapsed = 0.0
 
+        # 宠物当前是否正在移动（漫游/奔跑）。由 Game 每帧通过 update() 传入。
+        # 移动时体力缓慢消耗，静止时体力缓慢恢复。
+        self._moving = False
+
         # 临时动画剩余播放时间。大于 0 时，状态驱动的动画同步会被暂时跳过，
         # 计时结束后自动恢复为 pet.current_state 对应的动画。
         self._temp_animation_timer = 0.0
@@ -74,11 +78,14 @@ class PetBehavior:
         self._sleeping = False
         self._sync_animation()
 
-    def update(self, dt: float) -> None:
+    def update(self, dt: float, moving: bool = False) -> None:
         """累计时间，每达到一个 tick 间隔执行一次属性变化与状态刷新。
 
         dt: 距离上一次更新的时间间隔（秒）。
+        moving: 宠物当前是否正在移动（漫游/奔跑），决定体力消耗还是恢复。
         """
+        self._moving = moving
+
         if self._sleeping:
             self._update_sleep(dt)
             return
@@ -138,7 +145,13 @@ class PetBehavior:
     def _tick(self) -> None:
         """单次属性自然变化，并在状态变化时刷新动画。"""
         self.pet.decrease_hunger(settings.HUNGER_DECAY_PER_TICK)
-        self.pet.decrease_energy(settings.ENERGY_DECAY_PER_TICK)
+
+        # 体力：移动时缓慢消耗，静止（非睡眠）时缓慢恢复。
+        # 睡眠模式的快速恢复由 _update_sleep 单独处理，不会走到这里。
+        if self._moving:
+            self.pet.decrease_energy(settings.ENERGY_DECAY_PER_TICK)
+        else:
+            self.pet.increase_energy(settings.ENERGY_REGEN_PER_TICK)
 
         # 开心状态下心情保持不变，其余状态正常衰减
         if StateMachine.evaluate(self.pet.hunger, self.pet.mood, self.pet.energy) != PetState.HAPPY:

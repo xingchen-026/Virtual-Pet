@@ -44,6 +44,7 @@ class SettingsWindow:
         self.character = ""
         self.tone = ""
         self.pet_scale = settings.PET_SCALE_DEFAULT
+        self.reminder_interval = settings.REST_REMINDER_INTERVAL_MINUTES
         self.provider = PROVIDERS[0]
         self.base_url = ""
         self.model = ""
@@ -62,7 +63,8 @@ class SettingsWindow:
         self._hit_areas: Dict[str, pygame.Rect] = {}
 
     def open(
-        self, pet_scale: float, name: str, character: str, tone: str, ai_config: dict
+        self, pet_scale: float, name: str, character: str, tone: str, ai_config: dict,
+        reminder_interval: float = settings.REST_REMINDER_INTERVAL_MINUTES,
     ) -> None:
         """打开设置窗口，并以当前配置初始化各编辑项。"""
         self.visible = True
@@ -70,6 +72,7 @@ class SettingsWindow:
         self.character = character
         self.tone = tone
         self.pet_scale = pet_scale
+        self.reminder_interval = reminder_interval
         self.provider = ai_config.get("provider", PROVIDERS[0])
         if self.provider not in PROVIDERS:
             PROVIDERS.append(self.provider)
@@ -143,6 +146,16 @@ class SettingsWindow:
                 self.pet_scale = min(
                     settings.PET_SCALE_MAX, round(self.pet_scale + settings.PET_SCALE_STEP, 2)
                 )
+            elif name == "reminder_minus":
+                self.reminder_interval = max(
+                    settings.REMINDER_INTERVAL_MIN,
+                    self.reminder_interval - settings.REMINDER_INTERVAL_STEP,
+                )
+            elif name == "reminder_plus":
+                self.reminder_interval = min(
+                    settings.REMINDER_INTERVAL_MAX,
+                    self.reminder_interval + settings.REMINDER_INTERVAL_STEP,
+                )
             elif name == "provider":
                 self._provider_open = not self._provider_open
             elif name in ("name", "character", "tone", "base_url", "model", "api_key"):
@@ -211,6 +224,7 @@ class SettingsWindow:
             "character": self.character.strip(),
             "tone": self.tone.strip(),
             "pet_scale": self.pet_scale,
+            "reminder_interval": self.reminder_interval,
             "ai_config": self._collect_ai_config(),
         }
 
@@ -223,9 +237,7 @@ class SettingsWindow:
         if not self.visible:
             return
 
-        panel = pygame.Surface(self.rect.size)
-        panel.fill(theme.PANEL_BG_COLOR)
-        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
+        panel = theme.make_panel(self.rect.size)
 
         self._hit_areas = {}
         line_height = self.font.get_linesize()
@@ -243,6 +255,7 @@ class SettingsWindow:
         y = self._draw_field_row(panel, y, "性格", "character", self.character)
         y = self._draw_field_row(panel, y, "语气", "tone", self.tone)
         y = self._draw_scale_row(panel, y)
+        y = self._draw_reminder_row(panel, y)
         provider_rect, y = self._draw_provider_row(panel, y)
         y = self._draw_field_row(panel, y, "接口地址", "base_url", self.base_url or "（默认）")
         y = self._draw_field_row(panel, y, "模型", "model", self.model)
@@ -282,6 +295,31 @@ class SettingsWindow:
             self._hit_areas[name] = rect
 
         value = self.font.render(f"{self.pet_scale:.1f}x", True, theme.TEXT_COLOR)
+        panel.blit(value, value.get_rect(center=value_rect.center))
+
+        return y + ROW_HEIGHT
+
+    def _draw_reminder_row(self, panel: pygame.Surface, y: int) -> int:
+        """休息提醒间隔（分钟）：[-] / [+] 按钮调节。"""
+        label = self.font.render("提醒间隔", True, theme.LABEL_COLOR)
+        panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
+
+        value_x = self.rect.width // 2
+        minus_rect = pygame.Rect(value_x, y, FIELD_HEIGHT, FIELD_HEIGHT)
+        value_rect = pygame.Rect(minus_rect.right + 6, y, 56, FIELD_HEIGHT)
+        plus_rect = pygame.Rect(value_rect.right + 6, y, FIELD_HEIGHT, FIELD_HEIGHT)
+
+        for name, rect, text in (
+            ("reminder_minus", minus_rect, "-"),
+            ("reminder_plus", plus_rect, "+"),
+        ):
+            pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=4)
+            pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
+            glyph = self.font.render(text, True, theme.BUTTON_TEXT_COLOR)
+            panel.blit(glyph, glyph.get_rect(center=rect.center))
+            self._hit_areas[name] = rect
+
+        value = self.font.render(f"{self.reminder_interval:g}分", True, theme.TEXT_COLOR)
         panel.blit(value, value.get_rect(center=value_rect.center))
 
         return y + ROW_HEIGHT

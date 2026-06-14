@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple
 
+from config import settings
 from core.behavior import PetBehavior
 from core.behavior_tree import AutonomousBehavior, BehaviorTree
 from core.emotion import EmotionManager
@@ -41,11 +42,12 @@ _MOVING_BEHAVIOR_ANIMATIONS: Dict[AutonomousBehavior, str] = {
 }
 
 # 一次性行为 -> (临时动画状态名称, behavior_config 中对应的播放时长配置键)
+# 注：SLEEP 不在此列——它会进入 PetBehavior 的持续睡眠模式以恢复体力，
+# 仅在体力已满时退化为一次小憩动画（见 _execute）。
 _TEMP_ANIMATION_BEHAVIORS: Dict[AutonomousBehavior, Tuple[str, str]] = {
     AutonomousBehavior.LOOK_AROUND: ("look_around", "look_around_duration"),
     AutonomousBehavior.YAWN: ("tired", "yawn_duration"),
     AutonomousBehavior.HAPPY_PLAY: ("happy", "happy_duration"),
-    AutonomousBehavior.SLEEP: ("sleep", "sleep_duration"),
 }
 
 # 行为 -> 行为日志文案（仅在行为发生变化时记录一次）
@@ -134,12 +136,28 @@ class AutonomousManager:
             self.pet_behavior.sync_to_state_animation()
             return
 
+        if decision == AutonomousBehavior.SLEEP:
+            self._start_sleep()
+            return
+
         if decision in _MOVING_BEHAVIOR_ANIMATIONS:
             self._start_moving(decision)
             return
 
         animation, duration_key = _TEMP_ANIMATION_BEHAVIORS[decision]
         self.pet_behavior.trigger_temporary_animation(animation, self.config[duration_key])
+
+    def _start_sleep(self) -> None:
+        """宠物自主进入睡眠：体力未满时进入持续睡眠模式以较快恢复体力，
+        体力已满（如夜晚但精力充沛）时只小憩一会儿，不进入恢复循环，
+        避免回满后立刻被夜晚规则反复唤醒、再入睡造成抖动。
+        """
+        if self.pet.energy < settings.ATTRIBUTE_MAX:
+            self.pet_behavior.start_sleep()
+        else:
+            self.pet_behavior.trigger_temporary_animation(
+                "sleep", self.config["sleep_duration"]
+            )
 
     def _start_moving(self, decision: AutonomousBehavior) -> None:
         """根据决策选择移动速度并设定随机目标，同时切换为移动动画。"""

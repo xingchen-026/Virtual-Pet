@@ -104,9 +104,7 @@ class SkinWindow:
         if not self.visible:
             return
 
-        panel = pygame.Surface(self.rect.size)
-        panel.fill(theme.PANEL_BG_COLOR)
-        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
+        panel = theme.make_panel(self.rect.size)
 
         title = self.font.render(TITLE_TEXT, True, theme.TITLE_COLOR)
         panel.blit(title, (PADDING, PADDING))

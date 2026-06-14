@@ -73,6 +73,12 @@ BACKGROUND_FPS = 5
 # 0.08 秒（12.5fps），30fps 渲染完全够用，可省约一半渲染开销
 IDLE_FPS = 30
 
+# 主循环单帧最大时间步长（秒）。进程被系统挂起/降频（如长时间睡眠、
+# 窗口长期无焦点）后，下一帧 clock.tick 会返回很大的 dt；若不钳制，
+# 移动会一步跳到目标（视觉上"闪现"），属性也会瞬间大幅衰减。
+# 钳制到此上限可保证睡眠回满体力后仍平滑漫游。
+MAX_FRAME_DT = 0.1
+
 # 宠物数据自动存档间隔（秒），避免进程异常退出丢失进度
 AUTOSAVE_INTERVAL = 60.0
 
@@ -167,9 +173,14 @@ STATE_DISPLAY_NAMES = {
 # 正式发布时可调大（如 60）。
 ATTRIBUTE_DECAY_INTERVAL = 5.0
 
-# 每个间隔内饥饿值、体力值的衰减量
+# 每个间隔内饥饿值、体力值的衰减量。
+# 体力衰减仅在宠物移动时发生（漫游/奔跑），静止时不消耗。
 HUNGER_DECAY_PER_TICK = 1
 ENERGY_DECAY_PER_TICK = 1
+
+# 非移动、非睡眠状态下每个间隔体力的自然恢复量（站立缓慢回升）。
+# 数值小于睡眠恢复量，体现"睡觉回体力更快"。
+ENERGY_REGEN_PER_TICK = 1
 
 # 非开心状态下，每个间隔内心情值的衰减量
 MOOD_DECAY_PER_TICK = 0.2
@@ -207,3 +218,23 @@ SKIN_WINDOW_HEIGHT = 400
 
 # AI 情绪联动触发的临时动画播放时长（秒）
 AI_EFFECT_ANIMATION_DURATION = 2.0
+
+# ----- 休息提醒配置 -----
+# 默认每隔多少分钟弹出一次"休息提醒"聊天气泡（用户可在设置窗口调整）
+REST_REMINDER_INTERVAL_MINUTES = 30
+
+# 休息提醒间隔可调范围与步长（分钟），用于设置窗口的 [-]/[+] 调节
+REMINDER_INTERVAL_MIN = 5
+REMINDER_INTERVAL_MAX = 180
+REMINDER_INTERVAL_STEP = 5
+
+# 提醒气泡在宠物头顶的显示时长（秒）
+REST_REMINDER_BUBBLE_DURATION = 8.0
+
+# 休息提醒文案候选（每次随机选取一条）
+REST_REMINDER_MESSAGES = [
+    "主人，坐了好一会儿啦，起来活动一下、喝口水吧~",
+    "盯着屏幕好久咯，让眼睛看看远处休息 20 秒吧！",
+    "记得按时休息哦，伸个懒腰，放松一下肩颈~",
+    "工作再忙也要照顾好自己，陪我走两步好不好？",
+]

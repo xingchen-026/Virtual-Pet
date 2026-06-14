@@ -28,12 +28,16 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：新增 **SAD（难过）专属状态与动画**——StateMachine 在心情极低
-  （`MOOD_SAD_THRESHOLD=20`，优先级在饥饿/疲劳之后、开心之前）时返回 `PetState.SAD`，
-  映射到 `sad` 动画（`AnimationState.SAD` + `STATE_ANIMATION_MAP`）；新增内置占位帧
-  `assets/animations/sad/`（生成器加 `_build_sad_frames`）；中文名「难过」。
-  cat 皮肤缺 sad 会回退内置并在皮肤窗口标为缺失（可补充）。`tests/test_state_machine.py` 覆盖。
-- **更早的迭代**（皮肤制作全套、聊天持久化+记忆分层、设置增强、CI 等）详见下方「已完成」。
+- **最近一次完成**：**体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（五项需求一次性完成）：
+  ①体力仅移动时缓慢消耗、静止缓慢回升（`ENERGY_REGEN_PER_TICK`）、睡觉回升更快；
+  `Game._update` 把 `moving=movement.has_target()` 传入 `PetBehavior.update(dt, moving)`。
+  ②自主 SLEEP 改为进入持续睡眠恢复体力（体力满时仅小憩防夜晚抖动，`AutonomousManager._start_sleep`）。
+  ③修复睡眠回满后"闪现"：主循环钳制 `dt`≤`MAX_FRAME_DT=0.1`（进程挂起后超大 dt 会让移动一步跳到目标）。
+  ④休息提醒气泡 `ui/speech_bubble.py`（头顶圆角气泡，默认 30 分钟、随机文案、设置窗口可调间隔，
+  存 `user_config.reminder_interval_minutes`）。⑤数值面板时间改为系统真实时间。
+  ⑥全部窗口圆角：`theme.make_panel()`（SRCALPHA+圆角）替换 5 个面板的不透明 Surface。
+  `tests/test_behavior.py`（体力增减）、`tests/test_autonomous_sleep.py`（自主睡眠+气泡计时）覆盖。
+- **更早的迭代**（SAD 难过状态、皮肤制作全套、聊天持久化+记忆分层、设置增强、CI 等）详见下方「已完成」。
 - ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
@@ -54,7 +58,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 83 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 88 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -75,6 +79,16 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（用户需求，本轮）：
+  ①体力仅移动时缓慢消耗、静止缓慢回升、睡觉回升更快（`ENERGY_REGEN_PER_TICK`；
+  `Game` 把 `moving=movement.has_target()` 传入 `PetBehavior.update`）；
+  ②自主行为 SLEEP 改为进入持续睡眠恢复体力，体力满时仅小憩防夜晚抖动
+  （`AutonomousManager._start_sleep`）；③修复睡眠回满后"闪现"——主循环钳制单帧
+  `dt`≤`MAX_FRAME_DT=0.1`，避免进程挂起后超大 dt 让移动一步跳到目标；
+  ④休息提醒气泡 `ui/speech_bubble.py`（头顶圆角气泡，默认 30 分钟一次、随机文案、
+  设置窗口可调间隔并存 `user_config.reminder_interval_minutes`）；⑤数值面板时间改系统
+  真实时间；⑥所有窗口圆角——`theme.make_panel()`（SRCALPHA+圆角）替换 5 个面板的
+  不透明 Surface。`tests/test_behavior.py`、`tests/test_autonomous_sleep.py` 覆盖。
 - **SAD 难过状态**：心情极低（<20）进入 `PetState.SAD` -> `sad` 动画；新增内置占位帧
   `assets/animations/sad/`、中文名「难过」。`tests/test_state_machine.py` 覆盖。
 - **CI**：`.github/workflows/tests.yml`——push main / PR 时 Linux+Py3.12 跑 pytest（仅装测试依赖）。
@@ -138,13 +152,13 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 - `core/game.py`：主循环编排（事件/更新/渲染/帧率/托盘/自动存档/退出）。已瘦身。
 - `core/window_controller.py`：窗口跟随坐标换算与拖拽（坐标不变式集中于此）。
 - `ui/ui_manager.py`：聊天/数值面板/设置/皮肤窗口 + 事件路由 + AI 异步回传 + 属性变化(+xx)显示。
-- `ui/{chat_window,stats_panel,settings_window,skin_window,skin_creator,message_box,theme}.py`：各 UI 组件 + 共享配色。
+- `ui/{chat_window,stats_panel,settings_window,skin_window,skin_creator,message_box,speech_bubble,theme}.py`：各 UI 组件 + 头顶提示气泡 + 共享配色/圆角面板工厂。
 - `core/skin_builder.py`：皮肤构建引擎（切分/抠图/镜像/速度，写 skin.json）；`utils/dialogs.py`：tkinter 文件/颜色对话框。
 - `core/ai/*`：LLM 封装、人格、记忆、Prompt 拼接、情绪分析、AIService 入口。
 - `core/{pet,behavior,state_machine,autonomous,behavior_tree,movement,schedule,emotion}.py`：宠物与行为系统。
 - `core/{desktop,resource,sprite,animation,skin,interaction,action,event,food}.py`：平台/资源/渲染/交互。
 - `config/*.json`：ai_config（AI）、behavior_config（自主行为）、desktop_config（窗口）、
-  skin_config（当前皮肤）、user_config（宠物大小/窗口位置）。
+  skin_config（当前皮肤）、user_config（宠物大小/窗口位置/休息提醒间隔）。
 - `tests/`：pytest 回归（Pet 钳制/序列化、情绪规则、记忆并发与上限、精灵图切分、窗口坐标不变式）。
 
 ---
@@ -154,7 +168,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 83 passed）
+python -m pytest tests/ -q            # 回归测试（当前 88 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

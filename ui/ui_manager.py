@@ -20,7 +20,9 @@ UIManager 不直接修改宠物属性，也不执行喂食/玩耍的行为管线
 
 from __future__ import annotations
 
+import datetime
 import queue
+import random
 import threading
 from typing import Callable, List
 
@@ -33,6 +35,7 @@ from ui.chat_window import ChatWindow
 from ui.settings_window import SettingsWindow
 from ui.skin_creator import SkinCreator
 from ui.skin_window import SkinWindow
+from ui.speech_bubble import SpeechBubble
 from ui.stats_panel import StatsPanel
 from utils.exception import AIServiceError, log_exception
 from utils.helper import load_json, save_json
@@ -78,6 +81,7 @@ class UIManager:
         skin_manager=None,
         on_skin_change: Callable[[str], None] = None,
         on_skin_create: Callable[[dict], tuple] = None,
+        reminder_interval_minutes: float = settings.REST_REMINDER_INTERVAL_MINUTES,
     ) -> None:
         self.font = font
         self.pet = pet
@@ -94,6 +98,12 @@ class UIManager:
 
         # 数值信息面板：右键点击宠物弹出/关闭
         self.stats_panel = StatsPanel(font)
+
+        # 休息提醒：每隔 reminder_interval_minutes 分钟在宠物头顶弹出提示气泡。
+        # 气泡不拦截事件、不计入 is_active，不影响帧率与自主行为。
+        self.reminder_interval_minutes = reminder_interval_minutes
+        self.speech_bubble = SpeechBubble(font)
+        self._rest_timer = 0.0
 
         # 交互引起的属性变化（属性名 -> [变化量, 剩余显示时间]）
         self._attr_deltas: dict = {}
@@ -261,6 +271,7 @@ class UIManager:
             self.settings_window.open(
                 self.pet_sprite.scale, personality.name,
                 personality.character, personality.tone, self.ai_config,
+                reminder_interval=self.reminder_interval_minutes,
             )
             self.stats_panel.hide()
             self.desktop_manager.focus()
@@ -320,7 +331,9 @@ class UIManager:
 
         if result.get("action") == "save":
             self.pet_sprite.scale = result["pet_scale"]
-            self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置）
+            self.reminder_interval_minutes = result["reminder_interval"]
+            self._rest_timer = 0.0  # 间隔变更后重新计时
+            self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒间隔）
 
             # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格
             personality = self.ai_service.personality
@@ -379,8 +392,21 @@ class UIManager:
         self._process_ai_replies()
         self._process_ai_test_results()
         self._update_attr_deltas(dt)
+        self._update_rest_reminder(dt)
+        self.speech_bubble.update(dt)
         if self.skin_creator.visible:
             self.skin_creator.update(dt)
+
+    def _update_rest_reminder(self, dt: float) -> None:
+        """累计计时，到达提醒间隔时弹出一条随机休息提醒气泡并重置计时。"""
+        interval_seconds = max(1.0, self.reminder_interval_minutes * 60.0)
+        self._rest_timer += dt
+        if self._rest_timer >= interval_seconds:
+            self._rest_timer = 0.0
+            self.speech_bubble.show(
+                random.choice(settings.REST_REMINDER_MESSAGES),
+                settings.REST_REMINDER_BUBBLE_DURATION,
+            )
 
     def _process_ai_replies(self) -> None:
         """将后台线程中 AIService.chat() 返回的回复写回对话窗口。"""
@@ -441,6 +467,7 @@ class UIManager:
     def draw(self, screen: pygame.Surface) -> None:
         """绘制数值面板 / 聊天窗口 / 设置窗口（在宠物精灵之上）。"""
         self.stats_panel.draw(screen, self.pet_sprite.rect, self._stats_lines())
+        self.speech_bubble.draw(screen, self.pet_sprite.rect)
         self.chat_window.draw(screen)
         self.settings_window.draw(screen)
         self.skin_window.draw(screen)
@@ -449,17 +476,16 @@ class UIManager:
     def _stats_lines(self) -> List[str]:
         """生成数值信息面板的内容（右键点击宠物弹出）。
 
-        只展示名称、各属性数值与时间；行为、情绪、最近动作等
-        通过宠物动画直接呈现，不再以文字罗列。喂食/玩耍等交互引起的
-        属性变化以 +xx/-xx 后缀短暂显示（见 record_attr_deltas）。
+        只展示名称、各属性数值与时间；时间为系统真实时间。行为、情绪、
+        最近动作等通过宠物动画直接呈现，不再以文字罗列。喂食/玩耍等交互
+        引起的属性变化以 +xx/-xx 后缀短暂显示（见 record_attr_deltas）。
         """
         return [
             f"名称: {self.pet.name}",
             f"饥饿: {self.pet.hunger:.1f}{self._attr_delta_suffix('hunger')}",
             f"心情: {self.pet.mood:.1f}{self._attr_delta_suffix('mood')}",
             f"体力: {self.pet.energy:.1f}{self._attr_delta_suffix('energy')}",
-            f"时间: {self.autonomous_manager.schedule.time_of_day()}"
-            f" (第 {self.autonomous_manager.schedule.day_count} 天)",
+            f"时间: {datetime.datetime.now():%Y-%m-%d %H:%M:%S}",
         ]
 
 

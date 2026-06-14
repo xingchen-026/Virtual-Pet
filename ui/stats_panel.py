@@ -95,9 +95,7 @@ class StatsPanel:
         x, y = self._panel_position(surface, anchor_rect, width, height)
         self._panel_rect = pygame.Rect(x, y, width, height)
 
-        panel = pygame.Surface((width, height))
-        panel.fill(theme.PANEL_BG_COLOR)
-        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
+        panel = theme.make_panel((width, height))
 
         title_surface = self.font.render(TITLE_TEXT, True, theme.TITLE_COLOR)
         panel.blit(title_surface, (padding, padding))

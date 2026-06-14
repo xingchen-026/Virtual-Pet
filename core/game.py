@@ -184,6 +184,9 @@ class Game:
             skin_manager=self.skin_manager,
             on_skin_change=self._apply_skin,
             on_skin_create=self.create_skin,
+            reminder_interval_minutes=self.user_config.get(
+                "reminder_interval_minutes", settings.REST_REMINDER_INTERVAL_MINUTES
+            ),
         )
 
         # 系统托盘：菜单回调在后台线程执行，仅将动作放入队列，主循环统一处理
@@ -286,7 +289,9 @@ class Game:
         self.tray_icon.run_detached()
 
         while self.running:
-            dt = self.clock.tick(self._target_fps()) / 1000.0
+            # 钳制单帧时间步长：进程被系统挂起/降频后下一帧 dt 可能极大，
+            # 不钳制会导致移动一步跳变（"闪现"）与属性瞬间大幅衰减。
+            dt = min(self.clock.tick(self._target_fps()) / 1000.0, settings.MAX_FRAME_DT)
             self._handle_events()
             self._update(dt)
             self._render()
@@ -383,7 +388,9 @@ class Game:
         self._process_tray_actions()
         self.ui.update(dt)
 
-        self.behavior.update(dt)
+        # 体力消耗/恢复取决于宠物是否在移动：有移动目标即视为移动中
+        moving = self.autonomous_manager.movement.has_target()
+        self.behavior.update(dt, moving)
         # 以下情况暂停自主行为（宠物停在原地，窗口保持静止）：
         # 拖拽中、聊天/设置窗口打开、睡眠模式、危急状态（饥饿/体力归零）。
         interaction_active = (
@@ -413,6 +420,7 @@ class Game:
         设置保存与退出时统一调用，保证两类偏好不会互相覆盖。
         """
         self.user_config["pet_scale"] = self.pet_sprite.scale
+        self.user_config["reminder_interval_minutes"] = self.ui.reminder_interval_minutes
         if self.window.supported:
             self.user_config["window_position"] = list(self.window.window_pos)
         save_json(settings.USER_CONFIG_FILE, self.user_config)

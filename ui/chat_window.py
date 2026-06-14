@@ -111,9 +111,7 @@ class ChatWindow:
         if not self.visible:
             return
 
-        panel = pygame.Surface(self.rect.size)
-        panel.fill(theme.PANEL_BG_COLOR)
-        pygame.draw.rect(panel, theme.BORDER_COLOR, panel.get_rect(), 1)
+        panel = theme.make_panel(self.rect.size)
 
         title_surface = self.font.render(f"和 {self.pet_name} 聊天 (Esc 关闭)", True, theme.TITLE_COLOR)
         panel.blit(title_surface, (PADDING, (TITLE_HEIGHT - title_surface.get_height()) // 2))
