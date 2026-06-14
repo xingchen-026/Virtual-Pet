@@ -41,6 +41,7 @@ class AnimationState(enum.Enum):
     RUN = "run"
     LOOK_AROUND = "look_around"
     SLEEP = "sleep"
+    SAD = "sad"
 
 
 class Animation:

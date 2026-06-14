@@ -13,6 +13,7 @@ from core.pet_state import PetState
 HUNGER_THRESHOLD = 30
 ENERGY_THRESHOLD = 30
 MOOD_HAPPY_THRESHOLD = 80
+MOOD_SAD_THRESHOLD = 20
 
 
 class StateMachine:
@@ -22,13 +23,17 @@ class StateMachine:
     def evaluate(hunger: float, mood: float, energy: float) -> PetState:
         """根据 hunger / mood / energy 计算当前状态。
 
-        判断优先级：饥饿 > 疲劳 > 开心 > 默认（待机）。
+        判断优先级：饥饿 > 疲劳 > 难过 > 开心 > 默认（待机）。
+        饥饿/疲劳是更紧迫的生理需求，优先于情绪；心情极低时进入难过。
         """
         if hunger < HUNGER_THRESHOLD:
             return PetState.HUNGRY
 
         if energy < ENERGY_THRESHOLD:
             return PetState.TIRED
+
+        if mood < MOOD_SAD_THRESHOLD:
+            return PetState.SAD
 
         if mood > MOOD_HAPPY_THRESHOLD:
             return PetState.HAPPY

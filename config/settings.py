@@ -122,6 +122,7 @@ ANIMATION_FOLDERS = {
     "run": "run",
     "look_around": "look_around",
     "sleep": "sleep",
+    "sad": "sad",
 }
 
 # 动画状态名称 -> 单帧播放时长（秒），数值越小播放越快
@@ -138,6 +139,7 @@ ANIMATION_FRAME_DURATIONS = {
     "run": 0.08,
     "look_around": 0.30,
     "sleep": 0.50,
+    "sad": 0.35,
 }
 
 # 宠物默认动画状态
@@ -157,6 +159,7 @@ STATE_DISPLAY_NAMES = {
     "run": "奔跑",
     "look_around": "张望",
     "sleep": "睡觉",
+    "sad": "难过",
 }
 
 # ----- 属性随时间变化配置 -----

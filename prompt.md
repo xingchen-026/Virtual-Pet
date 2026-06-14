@@ -28,42 +28,15 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**：**皮肤制作功能**（「创建皮肤」按钮落地）——新增构建引擎
-  `core/skin_builder.py`（精灵图按行/网格切分 + 按状态上传 + 一键抠图 chroma_key
-  + 一键镜像 + 逐动画速度 frame_durations，写入 skin.json）与 GUI `ui/skin_creator.py`
-  （tkinter 选文件/选色，见 `utils/dialogs.py`）。皮肤窗口「创建皮肤」改为打开创建器，
-  生成后经 `Game.create_skin -> _reload_skin` 即时启用。`SkinManager.frame_durations`
-  + `Game._build_animation_manager` 支持逐皮肤播放速度。CLI `import_skin.py` 复用引擎。
-  `tests/test_skin_builder.py` 覆盖。
-- 已提交：皮肤选择独立窗口（缩略图预览，`b4cb315`）；性格/语气拆分（`0ee1bc4`）；
-  统一名称/设置改名/提示词优化/内容审查（`bf820eb`）。
+- **最近一次完成**：新增 **SAD（难过）专属状态与动画**——StateMachine 在心情极低
+  （`MOOD_SAD_THRESHOLD=20`，优先级在饥饿/疲劳之后、开心之前）时返回 `PetState.SAD`，
+  映射到 `sad` 动画（`AnimationState.SAD` + `STATE_ANIMATION_MAP`）；新增内置占位帧
+  `assets/animations/sad/`（生成器加 `_build_sad_frames`）；中文名「难过」。
+  cat 皮肤缺 sad 会回退内置并在皮肤窗口标为缺失（可补充）。`tests/test_state_machine.py` 覆盖。
+- **更早的迭代**（皮肤制作全套、聊天持久化+记忆分层、设置增强、CI 等）详见下方「已完成」。
 - ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
-- **最近一次完成**：加 **CI 自动跑 pytest**（`.github/workflows/tests.yml`）——push 到 main / 提 PR
-  时在 Linux + Python 3.12 上跑全部测试；CI 仅装 pygame/Pillow/numpy/scipy/pytest（不装
-  Windows 专用 pywin32/pystray，已验证测试不依赖它们）。
-- **聊天持久化 + 记忆分层 + 设置增强**：①聊天历史持久化——可见对话存
-  `data/chat_history.json`（`settings.CHAT_HISTORY_*`），重启回填聊天窗口（UIManager 加载+
-  `_record_chat`）；与 AI 记忆分离。②记忆分两层——短期=最近 3 轮（`SHORT_TERM_LIMIT=3`），
-  长期=主人习惯摘要（AIService 每 3 轮用 LLM 总结 `_update_long_term_summary` +
-  `MemoryManager.add_summary`/`PromptManager.summary_messages`）。③设置：服务商改**下拉选择**
-  （SettingsWindow `_provider_open`/`_draw_provider_popup`）+ 新增**接口地址 base_url**字段
-  （写入 ai_config `api_base`）。
-- **创建窗口交互优化（4 项）**：①精灵图改为**先点中文状态标签、再左键点帧贴标签**
-  （右键点帧取消），状态名全中文（`settings.STATE_DISPLAY_NAMES`）。②实时播放加**状态选择**
-  （点中文 chip 指定播放哪个状态）+ **镜像预览**开关（开则先播朝右再播朝左，
-  `_mirror_phase`）。③播放速度改为预览下方的**拖拉条 + 数值框**（数值框用编辑缓冲
-  `_speed_text` 避免逐键钳制串改）。④（用户跳过第 3 项）。
-- **多张精灵图 + 逐帧自由选状态**：精灵图可添加多张（同一皮肤不同资源拼成），每张切逐帧，
-  任意帧分配状态（同状态帧按序成动画），每张单独翻转/抠图。后端
-  `skin_builder.slice_frames/grouped_from_sheets/build_from_sheets`
-  （config `sheets=[{path,mirror,chroma_color,frame_states}]`）。
-- **点图取色 + 实时预览 + 皮肤合集/补充**：①源图点击取透明色（`SkinCreator._sample_color`）+
-  右侧实时播放（`preview_grouped` + `update(dt)`）。②皮肤选择窗口显示每皮肤缺失状态
-  （`SkinManager.covered_states/missing_states`），非默认皮肤「补充动画」按状态补齐
-  （`build_from_state_images` 合并保留已有）。抠图：自动取角落 / tkinter 选色 / 点源图取色（精灵图模式作用于聚焦图）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
-  - 功能向：SAD 等新状态专属动画。
   - 工程向：给 UIManager/AIService 补单测（CI 已就绪）。
   - 小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
   - 美术：接入正式素材/Lottie 动画，替换占位帧。
@@ -81,7 +54,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 78 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 83 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -102,6 +75,8 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **SAD 难过状态**：心情极低（<20）进入 `PetState.SAD` -> `sad` 动画；新增内置占位帧
+  `assets/animations/sad/`、中文名「难过」。`tests/test_state_machine.py` 覆盖。
 - **CI**：`.github/workflows/tests.yml`——push main / PR 时 Linux+Py3.12 跑 pytest（仅装测试依赖）。
 - **聊天持久化 + 记忆分层 + 设置增强**：聊天历史存 `data/chat_history.json` 重启回填；
   短期记忆=最近 3 轮、长期记忆=LLM 每 3 轮总结的主人习惯摘要；设置服务商下拉 + 自定义 base_url。
@@ -179,7 +154,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 78 passed）
+python -m pytest tests/ -q            # 回归测试（当前 83 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

@@ -207,6 +207,19 @@ def _build_sleep_frames() -> List[pygame.Surface]:
     ]
 
 
+def _build_sad_frames() -> List[pygame.Surface]:
+    cx, cy = CENTER
+    # 嘴角下垂（倒微笑）+ 低落的蓝灰色，轻微低头起伏
+    sad_mouth = [(cx - 12, cy + 18), (cx, cy + 12), (cx + 12, cy + 18)]
+    color = (130, 150, 180)
+    return [
+        _new_frame(color, 6, sad_mouth),
+        _new_frame(color, 8, sad_mouth),
+        _new_frame(color, 10, sad_mouth),
+        _new_frame(color, 8, sad_mouth),
+    ]
+
+
 ANIMATION_FRAME_BUILDERS = {
     "idle": _build_idle_frames,
     "happy": _build_happy_frames,
@@ -220,6 +233,7 @@ ANIMATION_FRAME_BUILDERS = {
     "run": _build_run_frames,
     "look_around": _build_look_around_frames,
     "sleep": _build_sleep_frames,
+    "sad": _build_sad_frames,
 }
 
 

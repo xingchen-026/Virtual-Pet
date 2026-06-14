@@ -19,14 +19,12 @@ from core.pet_state import PetState
 from core.state_machine import StateMachine
 
 # PetState -> 动画状态名称（对应 core.animation.AnimationState 的值）
-# 尚未拥有专属动画的状态（如 SAD）暂时回退到 idle 动画，
-# 待后续阶段补充对应动画资源后在此扩展。
 STATE_ANIMATION_MAP = {
     PetState.IDLE: "idle",
     PetState.HAPPY: "happy",
     PetState.HUNGRY: "hungry",
     PetState.TIRED: "tired",
-    PetState.SAD: "idle",
+    PetState.SAD: "sad",
 }
 
 
