@@ -57,7 +57,7 @@ VirtualPet/
 │   ├── skin_window.py        # 皮肤选择窗口（缩略图预览选择）
 │   └── skin_creator.py       # 创建皮肤窗口（精灵图/按状态 + 镜像/抠图/速度）
 │
-├── tests/                   # pytest 回归测试（Pet/情绪/记忆/精灵图切分）
+├── tests/                   # pytest 回归测试（Pet/情绪/记忆/精灵图切分/计时器/AIService/UIManager）
 │
 ├── assets/
 │   ├── images/               # 图片资源
@@ -86,6 +86,7 @@ VirtualPet/
 │   ├── exception.py          # 自定义异常与错误日志
 │   ├── behavior_logger.py    # 自主行为日志
 │   ├── spritesheet.py        # 精灵图切分（背景检测/去除/帧归一化）
+│   ├── timer.py              # IntervalTimer 周期计时器（存档/置顶/休息提醒）
 │   └── tray.py               # 系统托盘图标
 │
 └── README.md

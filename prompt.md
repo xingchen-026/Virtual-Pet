@@ -28,7 +28,15 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**（`7a2ceb1`，已 push）：**体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（五项需求一次性完成）：
+- **最近一次完成**（未提交）：**工程化收尾——计时器聚合 + UIManager/AIService 单测**：
+  ①新增 `utils/timer.py` 的 `IntervalTimer`（累计 dt、到点触发回调并清零，单帧超大 dt 也只触发一次），
+  聚合原先散落的自动存档 / 窗口置顶维持（`Game`）、休息提醒（`UIManager`）三处重复的 `_xxx_timer` 累加逻辑；
+  `Game` 另抽 `_save_pet_data()` 作为存档统一出口（自动存档/托盘保存/退出共用）。
+  ②补单测：`tests/test_timer.py`（计时器触发/重置/间隔变更）、`tests/test_ai_service.py`
+  （对话管线：审查拦截、离线降级、AI 违规回复替换、三轮总结、首次喂食去重、连接测试——用 FakeLLM
+  与 tmp 路径 Memory/Personality 隔离）、`tests/test_ui_manager.py`（属性变化提示、聊天历史上限、
+  面板按钮分发、休息提醒计时、活跃态——font=None + tmp CHAT_HISTORY 免渲染/免污染）。测试 88→111。
+- **更早一次完成**（`7a2ceb1`，已 push）：**体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（五项需求一次性完成）：
   ①体力仅移动时缓慢消耗、静止缓慢回升（`ENERGY_REGEN_PER_TICK`）、睡觉回升更快；
   `Game._update` 把 `moving=movement.has_target()` 传入 `PetBehavior.update(dt, moving)`。
   ②自主 SLEEP 改为进入持续睡眠恢复体力（体力满时仅小憩防夜晚抖动，`AutonomousManager._start_sleep`）。
@@ -41,10 +49,9 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
-  - 工程向：给 UIManager/AIService 补单测（CI 已就绪）。
-  - 小重构：托盘动作/自动存档/置顶维持等计时器逻辑聚合（价值低）。
-  - 美术：接入正式素材/Lottie 动画，替换占位帧。
-  - 注：「拖放道具」已被否决；「皮肤切换图形化」已完成，均不再列为候选。
+  - 美术：接入正式素材/Lottie 动画，替换占位帧（唯一剩余候选）。
+  - 注：「工程向单测」「计时器聚合」已完成（见上「最近一次完成」）；
+    「拖放道具」已被否决；「皮肤切换图形化」已完成，均不再列为候选。
 
 ---
 
@@ -58,7 +65,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 88 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 111 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -79,6 +86,12 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **工程化收尾——计时器聚合 + UIManager/AIService 单测**（未提交）：
+  抽 `utils/timer.py` 的 `IntervalTimer`（累计 dt、到点触发回调并清零、超大 dt 只触发一次），
+  替换 `Game`（自动存档/置顶维持）与 `UIManager`（休息提醒）三处重复的计时器累加；
+  `Game._save_pet_data()` 统一存档出口。新增 `tests/test_timer.py`、`tests/test_ai_service.py`
+  （FakeLLM + tmp 路径隔离，覆盖审查/离线降级/违规回复替换/三轮总结/首次喂食去重/连接测试）、
+  `tests/test_ui_manager.py`（font=None + tmp CHAT_HISTORY，覆盖属性提示/历史上限/面板分发/提醒计时/活跃态）。测试 88→111。
 - **体力重做 + 自主睡眠 + 休息提醒 + 真实时间 + 圆角界面**（`7a2ceb1`）：
   ①体力仅移动时缓慢消耗、静止缓慢回升、睡觉回升更快（`ENERGY_REGEN_PER_TICK`；
   `Game` 把 `moving=movement.has_target()` 传入 `PetBehavior.update`）；
@@ -159,7 +172,9 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 - `core/{desktop,resource,sprite,animation,skin,interaction,action,event,food}.py`：平台/资源/渲染/交互。
 - `config/*.json`：ai_config（AI）、behavior_config（自主行为）、desktop_config（窗口）、
   skin_config（当前皮肤）、user_config（宠物大小/窗口位置/休息提醒间隔）。
-- `tests/`：pytest 回归（Pet 钳制/序列化、情绪规则、记忆并发与上限、精灵图切分、窗口坐标不变式）。
+- `utils/timer.py`：`IntervalTimer` 周期计时器（聚合自动存档/置顶维持/休息提醒的累加触发逻辑）。
+- `tests/`：pytest 回归（Pet 钳制/序列化、情绪规则、记忆并发与上限、精灵图切分、窗口坐标不变式、
+  计时器触发、AIService 对话管线、UIManager 纯逻辑）。
 
 ---
 
@@ -168,7 +183,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 88 passed）
+python -m pytest tests/ -q            # 回归测试（当前 111 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

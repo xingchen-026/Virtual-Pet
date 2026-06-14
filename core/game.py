@@ -76,6 +76,7 @@ from core.window_controller import WindowController
 from ui.ui_manager import UIManager
 from utils.behavior_logger import BehaviorLogger
 from utils.helper import load_json, save_json
+from utils.timer import IntervalTimer
 from utils.tray import TrayIcon
 
 # 用户交互事件 -> 行为日志文案
@@ -107,7 +108,10 @@ class Game:
 
         # 桌面窗口能力：透明 / 置顶 / 隐藏 / 移动，统一通过 DesktopManager 操作 OS API
         self.desktop_manager = DesktopManager(self.desktop_config)
-        self._topmost_timer = 0.0
+        # 周期性维持窗口置顶（避免每帧调用系统 API），到点触发 keep_on_top
+        self._topmost_timer = IntervalTimer(
+            settings.TOPMOST_REFRESH_INTERVAL, self.desktop_manager.keep_on_top
+        )
 
         self.clock = pygame.time.Clock()
         self.running = True
@@ -160,7 +164,7 @@ class Game:
         self.pet_sprite.scale = self.user_config.get("pet_scale", settings.PET_SCALE_DEFAULT)
 
         # 宠物数据自动存档计时器（settings.AUTOSAVE_INTERVAL 秒一次）
-        self._autosave_timer = 0.0
+        self._autosave_timer = IntervalTimer(settings.AUTOSAVE_INTERVAL, self._save_pet_data)
 
         # AI 服务：Pet -> AIService -> LLM，人格/记忆数据持久化到 data/ 下的 JSON 文件
         # ai_config 保留引用，供设置窗口读取/更新后写回
@@ -408,10 +412,11 @@ class Game:
 
     def _autosave(self, dt: float) -> None:
         """定期自动保存宠物数据，避免进程异常退出丢失进度。"""
-        self._autosave_timer += dt
-        if self._autosave_timer >= settings.AUTOSAVE_INTERVAL:
-            self._autosave_timer = 0.0
-            save_json(settings.PET_DATA_FILE, self.pet.to_dict())
+        self._autosave_timer.update(dt)
+
+    def _save_pet_data(self) -> None:
+        """将宠物当前数据写入存档（自动存档 / 托盘保存 / 退出共用同一出口）。"""
+        save_json(settings.PET_DATA_FILE, self.pet.to_dict())
 
     def _save_user_config(self) -> None:
         """将用户偏好（宠物大小、当前窗口位置等）合并写回 user_config.json。
@@ -435,7 +440,7 @@ class Game:
             elif action == "hide":
                 self.desktop_manager.hide()
             elif action == "save":
-                save_json(settings.PET_DATA_FILE, self.pet.to_dict())
+                self._save_pet_data()
             elif action == "exit":
                 self.running = False
 
@@ -443,11 +448,7 @@ class Game:
         """周期性维持窗口置顶状态，避免每帧调用系统 API 影响性能。"""
         if not self.desktop_config.get("always_on_top", False):
             return
-
-        self._topmost_timer += dt
-        if self._topmost_timer >= settings.TOPMOST_REFRESH_INTERVAL:
-            self._topmost_timer = 0.0
-            self.desktop_manager.keep_on_top()
+        self._topmost_timer.update(dt)
 
     def _render(self):
         """渲染当前帧：填充背景（透明色键或白色）、绘制宠物精灵与界面窗口。"""
@@ -464,7 +465,7 @@ class Game:
     def _quit(self):
         """停止系统托盘、保存宠物数据与用户偏好并安全退出 Pygame 与程序。"""
         self.tray_icon.stop()
-        save_json(settings.PET_DATA_FILE, self.pet.to_dict())
+        self._save_pet_data()
         self._save_user_config()
         pygame.quit()
         sys.exit()

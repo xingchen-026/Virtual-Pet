@@ -39,6 +39,7 @@ from ui.speech_bubble import SpeechBubble
 from ui.stats_panel import StatsPanel
 from utils.exception import AIServiceError, log_exception
 from utils.helper import load_json, save_json
+from utils.timer import IntervalTimer
 
 # 聊天工作线程意外异常时回传给用户的兜底回复
 _CHAT_FALLBACK_REPLY = "（呜……我刚才走神了，再和我说一遍好吗？）"
@@ -103,7 +104,9 @@ class UIManager:
         # 气泡不拦截事件、不计入 is_active，不影响帧率与自主行为。
         self.reminder_interval_minutes = reminder_interval_minutes
         self.speech_bubble = SpeechBubble(font)
-        self._rest_timer = 0.0
+        self._rest_timer = IntervalTimer(
+            self._reminder_seconds(), self._show_rest_reminder
+        )
 
         # 交互引起的属性变化（属性名 -> [变化量, 剩余显示时间]）
         self._attr_deltas: dict = {}
@@ -332,7 +335,9 @@ class UIManager:
         if result.get("action") == "save":
             self.pet_sprite.scale = result["pet_scale"]
             self.reminder_interval_minutes = result["reminder_interval"]
-            self._rest_timer = 0.0  # 间隔变更后重新计时
+            # 间隔变更后按新间隔重新计时
+            self._rest_timer.interval = self._reminder_seconds()
+            self._rest_timer.reset()
             self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒间隔）
 
             # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格
@@ -397,16 +402,20 @@ class UIManager:
         if self.skin_creator.visible:
             self.skin_creator.update(dt)
 
+    def _reminder_seconds(self) -> float:
+        """当前提醒间隔（秒），下限 1 秒避免间隔为 0 时每帧触发。"""
+        return max(1.0, self.reminder_interval_minutes * 60.0)
+
     def _update_rest_reminder(self, dt: float) -> None:
-        """累计计时，到达提醒间隔时弹出一条随机休息提醒气泡并重置计时。"""
-        interval_seconds = max(1.0, self.reminder_interval_minutes * 60.0)
-        self._rest_timer += dt
-        if self._rest_timer >= interval_seconds:
-            self._rest_timer = 0.0
-            self.speech_bubble.show(
-                random.choice(settings.REST_REMINDER_MESSAGES),
-                settings.REST_REMINDER_BUBBLE_DURATION,
-            )
+        """累计计时，到达提醒间隔时弹出休息提醒气泡（由计时器回调触发）。"""
+        self._rest_timer.update(dt)
+
+    def _show_rest_reminder(self) -> None:
+        """弹出一条随机休息提醒气泡。"""
+        self.speech_bubble.show(
+            random.choice(settings.REST_REMINDER_MESSAGES),
+            settings.REST_REMINDER_BUBBLE_DURATION,
+        )
 
     def _process_ai_replies(self) -> None:
         """将后台线程中 AIService.chat() 返回的回复写回对话窗口。"""
