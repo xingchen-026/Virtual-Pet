@@ -28,7 +28,30 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**（未提交）：**电子围栏 + 喂食放置 + 设置保存退出**：
+- **最近一次完成**（未提交）：**围栏窗口化 + 鼠标取点 + 食物上限**（在下方「电子围栏」基础上迭代）：
+  ①食物上限——`settings.FOOD_MAX_COUNT=10`；`FeedingController.add(point, max_count)` 返回 bool、新增 `is_full`；
+  `Game._handle_feed_placement` 到顶忽略并气泡「先吃完这些」。
+  ②围栏取点改为鼠标点两个对角（不再拖宠物）——点「围栏」进入**全屏取点态**（窗口铺满整屏透明遮罩、
+  `_fence_selecting`），桌面点两下定对角，画橡皮筋预览；`FenceController` 加 `clear()`/`pending`。
+  ③设好围栏后**窗口扩展为围栏大小并固定**——新增窗口三态（跟随 / 全屏取点 / 围栏固定）：
+  `WindowController.follow` + `set_geometry` + `sync_to_pet` 分两路（固定模式不移窗、改设 `render_center=pet-window_pos`）；
+  `DesktopManager.reapply_after_resize`（运行时 `set_mode` 后重取句柄、重应用透明/置顶/定位）；
+  `Game._apply_window_geometry`/`_enter_select_mode`/`_enter_fence_mode`/`_enter_follow_mode` 编排（围栏模式漫游用
+  半精灵内缩的围栏夹取、宠物不在围栏内则移到中心；拖拽改为在固定窗口内移动宠物）；`UIManager.set_canvas_size`
+  随画布尺寸重算弹窗停靠；启动时若存有围栏直接进入围栏模式。测试 132→142（test_feeding/test_fence/test_window_controller）。
+  实机冒烟已过（三态切换 + 运行时缩放不抛异常、几何/边界/渲染中心正确）；透明/置顶/点击/气泡的肉眼确认建议 `python main.py` 复核。
+  - **用户反馈修复（同未提交）**：①喂食放置范围——无围栏时改为借用全屏遮罩（`_enter_fullscreen_overlay` +
+    `_feed_overlay` 标志，结束恢复跟随），可在桌面任意处放食物而非局限宠物周围的小窗口；有围栏时窗口本就是围栏、
+    放置即被夹在围栏内。②退化围栏防护——`FENCE_MIN_SIZE=150`，两角太近（误双击）得到的极小围栏被拒绝（留在取点态重选、
+    气泡 `too_small`），存档中的退化围栏启动时忽略（`Game._fence_too_small`），避免窗口缩成一个点导致无法操作。
+    ③取点态沿整块画布画一圈边框，直观提示"可在全屏范围内框选"。事件流冒烟逐项验证通过。
+  - **用户反馈修复2「无法选择两个点」（同未提交）**：根因——桌宠用**颜色键透明（LWA_COLORKEY）**，
+    其透明（洋红）像素上的点击会**穿透到桌面**（这正是桌宠平时的点击穿透特性），导致全屏遮罩里
+    除宠物/边框外的空白处点不到、取不了点。修复：取点/无围栏放置态把分层窗口切到**统一半透明
+    LWA_ALPHA**（`DesktopManager.set_overlay_alpha` + `settings.OVERLAY_ALPHA/OVERLAY_BG_COLOR`，
+    `_render` 遮罩态填压暗色），整屏皆可点、桌面淡淡压暗示意；退出经 `_apply_window_geometry`→`set_transparent`
+    还原颜色键。Win32 层冒烟确认：取点态 flags=LWA_ALPHA(alpha=96)、退出还原 LWA_COLORKEY。
+- **更早一次完成**（未提交）：**电子围栏 + 喂食放置 + 设置保存退出**：
   ①电子围栏——右键面板「围栏」按钮拖窗两点定角（点一次记宠物当前位置为一角、拖到对角再点定矩形，
   已有围栏时再点清除）；`core/fence.py` 的 `FenceController`（纯状态机 + `contains` + `popup_topleft` 布局函数）；
   `MovementController.set_fence/clear_fence` 把随机漫游夹到围栏内；存 `user_config.fence` 重启保留。
@@ -73,7 +96,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 132 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 142 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -94,6 +117,11 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
    EmotionAnalyzer / AIService；聊天窗口；对话影响情绪、AI 行为影响状态）
 
 ### 近期迭代
+- **围栏窗口化 + 鼠标取点 + 食物上限**（未提交）：食物上限 10（`FOOD_MAX_COUNT`、`FeedingController.add`
+  返 bool + `is_full`、到顶气泡）；围栏取点改全屏遮罩点两个对角（`_fence_selecting` + `FenceController.clear/pending`
+  + 橡皮筋预览）；设围栏后窗口缩成围栏矩形并固定、宠物在内漫游——窗口三态（`WindowController.follow`/`set_geometry`/
+  `sync_to_pet` 分两路、`DesktopManager.reapply_after_resize`、`Game._apply_window_geometry`/`_enter_*_mode`、
+  `UIManager.set_canvas_size`、启动恢复直接进围栏模式）。`tests/test_feeding/test_fence/test_window_controller` 覆盖（132→142）。
 - **电子围栏 + 喂食放置 + 设置保存退出**（未提交）：
   ①电子围栏（`core/fence.py`：`FenceController` 两点定角状态机 + `contains` + `popup_topleft`；
   `MovementController.set_fence/clear_fence` 夹取随机漫游范围；存 `user_config.fence`）；
@@ -202,7 +230,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 132 passed）
+python -m pytest tests/ -q            # 回归测试（当前 142 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

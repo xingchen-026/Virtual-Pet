@@ -40,7 +40,7 @@ def _make_ui(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "CHAT_HISTORY_FILE", str(tmp_path / "chat.json"))
     pet = Pet()
     interactions = []
-    calls = {"feed_place": 0, "fence": 0}
+    calls = {"feed_place": 0, "fence": 0, "fence_view": 0}
     ui = UIManager(
         None,
         pet,
@@ -54,6 +54,7 @@ def _make_ui(monkeypatch, tmp_path):
         on_user_prefs_changed=lambda: None,
         on_feed_place_start=lambda: calls.__setitem__("feed_place", calls["feed_place"] + 1),
         on_fence_toggle=lambda: calls.__setitem__("fence", calls["fence"] + 1),
+        on_fence_view_toggle=lambda: calls.__setitem__("fence_view", calls["fence_view"] + 1),
     )
     return ui, pet, interactions, calls
 
@@ -99,6 +100,14 @@ def test_panel_action_fence_toggles(monkeypatch, tmp_path):
     ui, _, _, calls = _make_ui(monkeypatch, tmp_path)
     ui._handle_panel_action("fence")
     assert calls["fence"] == 1
+
+
+def test_panel_action_fence_view_toggles_without_hiding_panel(monkeypatch, tmp_path):
+    ui, _, _, calls = _make_ui(monkeypatch, tmp_path)
+    ui.stats_panel.visible = True
+    ui._handle_panel_action("fence_view")
+    assert calls["fence_view"] == 1
+    assert ui.stats_panel.visible  # 围栏显隐保持面板打开，便于连续切换
 
 
 def test_panel_action_ignores_unknown(monkeypatch, tmp_path):

@@ -89,9 +89,10 @@ class AutonomousManager:
         self._last_logged_behavior: Optional[AutonomousBehavior] = None
 
         # 用户放下的食物位置（坐标系同 Pet.position）。非 None 时优先于随机
-        # 漫游：宠物走向食物，到达后调用 on_food_reached（由 Game 接入喂食管线）。
+        # 漫游：宠物走向食物，到达后以到达坐标调用 on_food_reached（Game 据此
+        # 移除该份食物、应用喂食效果，并在还有剩余时设定下一个目标）。
         self.food_target: Optional[Tuple[int, int]] = None
-        self.on_food_reached: Optional[Callable[[], None]] = None
+        self.on_food_reached: Optional[Callable[[Tuple[int, int]], None]] = None
 
     def update(self, dt: float, interaction_active: bool) -> None:
         """每帧调用一次。
@@ -128,7 +129,7 @@ class AutonomousManager:
         self._execute(decision)
 
     def _seek_food(self, dt: float) -> None:
-        """走向已放下的食物，到达后清除目标并触发喂食回调。"""
+        """走向已放下的食物，到达后清除目标并以到达坐标触发喂食回调。"""
         if not self.movement.has_target():
             speed = self.config["walk_speed"] * self.config["hungry_speed_multiplier"]
             self.movement.set_target(self.food_target, speed)
@@ -136,11 +137,12 @@ class AutonomousManager:
             self._current_behavior = AutonomousBehavior.SEEK_FOOD
 
         if self.movement.update(dt):
+            reached = self.food_target
             self.food_target = None
             self.pet_behavior.sync_to_state_animation()
             self._current_behavior = AutonomousBehavior.IDLE
             if self.on_food_reached is not None:
-                self.on_food_reached()
+                self.on_food_reached(reached)
 
     @property
     def current_behavior(self) -> AutonomousBehavior:

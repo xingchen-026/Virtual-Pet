@@ -27,6 +27,27 @@ def test_toggle_clears_existing_fence():
     assert fc.fence is None
 
 
+def test_pending_exposes_first_corner():
+    fc = FenceController()
+    assert fc.pending is None
+    fc.toggle((120, 90))
+    assert fc.pending == (120, 90)  # 取点中暴露第一个角供绘制预览
+    fc.toggle((300, 250))
+    assert fc.pending is None  # 第二点后清空待定
+
+
+def test_clear_resets_fence_and_pending():
+    fc = FenceController()
+    fc.toggle((0, 0))
+    fc.toggle((200, 200))
+    assert fc.fence is not None
+    fc.clear()
+    assert fc.fence is None
+    assert fc.pending is None
+    # 清除后可重新取点
+    assert fc.toggle((10, 10)) == "first_corner"
+
+
 def test_contains_no_fence_is_always_true():
     fc = FenceController()
     assert fc.contains((9999, 9999))

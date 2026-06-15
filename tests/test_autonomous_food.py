@@ -18,10 +18,10 @@ def _manager():
 def test_food_target_triggers_callback_on_arrival():
     manager, pet = _manager()
     reached = []
-    manager.on_food_reached = lambda: reached.append(True)
+    manager.on_food_reached = reached.append  # 以到达坐标回调
     manager.food_target = (410, 300)  # 距离 10，一次大 dt 即可走到
     manager.update(1.0, interaction_active=False)
-    assert reached == [True]
+    assert reached == [(410, 300)]
     assert manager.food_target is None
     assert pet.position == (410, 300)
 
@@ -29,7 +29,7 @@ def test_food_target_triggers_callback_on_arrival():
 def test_interaction_active_suppresses_food_seek():
     manager, _ = _manager()
     reached = []
-    manager.on_food_reached = lambda: reached.append(True)
+    manager.on_food_reached = reached.append
     manager.food_target = (410, 300)
     manager.update(1.0, interaction_active=True)
     assert reached == []

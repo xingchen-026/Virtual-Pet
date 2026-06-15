@@ -38,19 +38,38 @@ class WindowController:
         self.center = (window_size[0] // 2, window_size[1] // 2)
         self.window_pos = desktop_manager.get_position()
 
+        # 是否处于"跟随模式"：True=窗口跟随宠物（宠物恒居中心，默认）；
+        # False=窗口固定（围栏模式），宠物在固定窗口内按屏幕坐标渲染、漫游。
+        self.follow = True
+
         # 窗口移动拖拽的起始锚点 (起始鼠标屏幕坐标, 起始窗口坐标)，
         # 为 None 表示当前不处于窗口移动拖拽中
         self._drag_anchor: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None
 
     @property
     def supported(self) -> bool:
-        """是否处于窗口跟随模式（拿到了有效窗口句柄）。"""
+        """是否拿到了有效窗口句柄（具备桌面窗口能力）。"""
         return self.desktop.supported
 
     @property
     def dragging_window(self) -> bool:
-        """当前是否正在进行窗口移动拖拽。"""
+        """当前是否正在进行窗口移动拖拽（仅跟随模式才会移动整窗）。"""
         return self._drag_anchor is not None
+
+    def set_geometry(
+        self,
+        window_size: Tuple[int, int],
+        window_pos: Tuple[int, int],
+        follow: bool,
+    ) -> None:
+        """窗口尺寸/位置/模式发生变化后同步内部状态（由 Game 缩放窗口时调用）。
+
+        重算窗口中心、记录窗口左上角与是否跟随。不直接操作 OS，OS 侧的
+        set_mode/移动由 Game 与 DesktopManager 负责。
+        """
+        self.center = (window_size[0] // 2, window_size[1] // 2)
+        self.window_pos = window_pos
+        self.follow = follow
 
     def initialize(self, saved_position: Optional[Sequence[int]] = None) -> None:
         """应用初始/上次保存的窗口位置，并建立宠物与窗口中心的坐标关系。
@@ -73,10 +92,10 @@ class WindowController:
     def begin_drag(self) -> None:
         """开始窗口移动拖拽：记录起始锚点。
 
-        仅在支持桌面窗口能力时记录；不支持的平台保持 _drag_anchor
-        为 None，由调用方退化为"宠物在窗口内移动"。
+        仅在跟随模式且支持桌面窗口能力时记录；不支持的平台或围栏模式下
+        保持 _drag_anchor 为 None，由调用方退化为"宠物在窗口内移动"。
         """
-        if not self.desktop.supported:
+        if not self.desktop.supported or not self.follow:
             return
         self._drag_anchor = (
             self.desktop.get_cursor_position(),
@@ -106,8 +125,20 @@ class WindowController:
         self._drag_anchor = None
 
     def sync_to_pet(self) -> None:
-        """窗口跟随宠物：使窗口中心始终对准宠物的屏幕坐标。"""
+        """每帧同步窗口与宠物的位置关系。
+
+        * 跟随模式：移动整窗使窗口中心对准宠物屏幕坐标（宠物恒居中心）。
+        * 围栏模式（follow=False）：窗口固定不动，改为把宠物精灵的渲染中心
+          设为"宠物屏幕坐标 - 窗口左上角"，使宠物在固定窗口内按其位置呈现。
+        """
         if not self.desktop.supported:
+            return
+
+        if not self.follow:
+            self.pet_sprite.render_center = (
+                self.pet.position[0] - self.window_pos[0],
+                self.pet.position[1] - self.window_pos[1],
+            )
             return
 
         target = (

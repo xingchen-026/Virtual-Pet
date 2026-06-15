@@ -87,6 +87,29 @@ class DesktopManager:
         if self.config.get("start_hidden", False):
             self.hide()
 
+    def reapply_after_resize(self, x: int, y: int) -> None:
+        """运行时 pygame.display.set_mode 重设窗口尺寸后重新应用桌面属性。
+
+        SDL 重建显示表面后窗口句柄可能变化、分层透明/置顶属性可能丢失，
+        故重新获取句柄并按 desktop_config 重新设置透明/置顶，最后移动到 (x, y)。
+        Game 在 set_mode 之后调用本方法，保证缩放后窗口仍透明、置顶、定位正确。
+        """
+        if not _IS_WINDOWS:
+            return
+
+        try:
+            self._hwnd = pygame.display.get_wm_info()["window"]
+        except Exception as exc:
+            log_exception(DesktopWindowError(f"缩放后获取窗口句柄失败: {exc}"))
+            self._hwnd = None
+            return
+
+        if self.config.get("transparent", False):
+            self.set_transparent()
+        if self.config.get("always_on_top", False):
+            self.set_topmost()
+        self.set_position(x, y)
+
     def set_transparent(self) -> None:
         """将窗口背景设置为透明（基于 settings.TRANSPARENT_COLOR_KEY 颜色键）。"""
         if not self.supported:
@@ -101,6 +124,25 @@ class DesktopManager:
             win32gui.SetLayeredWindowAttributes(self._hwnd, color_key, 0, win32con.LWA_COLORKEY)
         except Exception as exc:
             log_exception(DesktopWindowError(f"设置窗口透明失败: {exc}"))
+
+    def set_overlay_alpha(self, alpha: int) -> None:
+        """把分层窗口切到统一半透明（LWA_ALPHA），使整窗都能接收鼠标点击。
+
+        颜色键透明（LWA_COLORKEY）下，透明像素上的点击会穿透到桌面，
+        全屏取点/放置时无法在空白处点选；改用统一 alpha 后整屏都可点击，
+        桌面也以背景色淡淡压暗。退出遮罩时再由 set_transparent 还原颜色键。
+        """
+        if not self.supported:
+            return
+
+        try:
+            styles = win32gui.GetWindowLong(self._hwnd, win32con.GWL_EXSTYLE)
+            win32gui.SetWindowLong(
+                self._hwnd, win32con.GWL_EXSTYLE, styles | win32con.WS_EX_LAYERED
+            )
+            win32gui.SetLayeredWindowAttributes(self._hwnd, 0, alpha, win32con.LWA_ALPHA)
+        except Exception as exc:
+            log_exception(DesktopWindowError(f"设置遮罩半透明失败: {exc}"))
 
     def set_topmost(self) -> None:
         """将窗口设置为置顶显示，不改变窗口位置/大小，不抢占焦点。"""

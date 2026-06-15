@@ -29,6 +29,7 @@ BUTTON_ROWS = [
     [("喂食", "feed"), ("玩耍", "play"), ("洗澡", "bath")],
     [("睡觉", "sleep"), ("礼物", "gift"), ("围栏", "fence")],
     [("皮肤", "skin"), ("聊天", "chat"), ("设置", "settings")],
+    [("隐藏围栏", "fence_view")],
 ]
 
 BUTTON_HEIGHT = 28
@@ -78,6 +79,7 @@ class StatsPanel:
         anchor_rect: pygame.Rect,
         lines: List[str],
         force_topleft: Optional[Tuple[int, int]] = None,
+        button_labels: Optional[dict] = None,
     ) -> None:
         """在宠物旁边绘制面板。
 
@@ -85,6 +87,7 @@ class StatsPanel:
         放不下时翻到左侧，并整体限制在窗口范围内。
         force_topleft: 设围栏后由 UIManager 传入的统一基点左上角，
         非 None 时改用该位置（仍夹取到窗口范围内），使面板与其它弹窗统一定位。
+        button_labels: 按钮标识 -> 动态文案覆盖（如围栏显隐按钮的"隐藏/显示围栏"）。
         """
         if not self.visible or not lines:
             return
@@ -119,7 +122,7 @@ class StatsPanel:
             panel.blit(text_surface, (padding, text_y))
             text_y += line_height
 
-        self._draw_buttons(panel, x, y, padding, text_y + padding)
+        self._draw_buttons(panel, x, y, padding, text_y + padding, button_labels or {})
 
         surface.blit(panel, (x, y))
 
@@ -130,6 +133,7 @@ class StatsPanel:
         panel_y: int,
         padding: int,
         buttons_y: int,
+        button_labels: dict,
     ) -> None:
         """绘制底部功能按钮（多行排列），并记录各按钮的窗口坐标命中区域。"""
         width = panel.get_width()
@@ -150,7 +154,9 @@ class StatsPanel:
                 pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, local_rect, border_radius=6)
                 pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, local_rect, 1, border_radius=6)
 
-                text_surface = self.font.render(label, True, theme.BUTTON_TEXT_COLOR)
+                text_surface = self.font.render(
+                    button_labels.get(action, label), True, theme.BUTTON_TEXT_COLOR
+                )
                 panel.blit(
                     text_surface,
                     (

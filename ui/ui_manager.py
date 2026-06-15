@@ -85,6 +85,8 @@ class UIManager:
         reminder_interval_minutes: float = settings.REST_REMINDER_INTERVAL_MINUTES,
         on_feed_place_start: Callable[[], None] = None,
         on_fence_toggle: Callable[[], None] = None,
+        on_fence_view_toggle: Callable[[], None] = None,
+        fence_view_label: Callable[[], str] = None,
         on_quit: Callable[[], None] = None,
         popup_anchor: Callable[[Tuple[int, int]], Optional[Tuple[int, int]]] = None,
     ) -> None:
@@ -102,6 +104,8 @@ class UIManager:
         self._on_skin_create = on_skin_create
         self._on_feed_place_start = on_feed_place_start
         self._on_fence_toggle = on_fence_toggle
+        self._on_fence_view_toggle = on_fence_view_toggle
+        self._fence_view_label = fence_view_label
         self._on_quit = on_quit
         self._popup_anchor = popup_anchor
 
@@ -140,6 +144,7 @@ class UIManager:
 
         # 创建皮肤窗口：内容较多，居中显示（创建为一次性模态任务，临时遮挡可接受）
         creator_size = (500, 600)
+        self._creator_size = creator_size
         creator_rect = pygame.Rect(
             (window_size[0] - creator_size[0]) // 2,
             (window_size[1] - creator_size[1]) // 2,
@@ -173,6 +178,31 @@ class UIManager:
     def pet_name(self) -> str:
         """对话窗口标题使用的宠物名（取自人格服务）。"""
         return self.ai_service.personality.name
+
+    def set_canvas_size(self, window_size) -> None:
+        """窗口画布尺寸变化（围栏模式缩放/恢复）后，重算各弹窗默认停靠矩形。
+
+        设置/皮肤窗口靠右侧停靠、垂直居中，创建窗口居中，均依赖画布尺寸；
+        聊天窗口固定停靠左上角，不随尺寸变化。下次打开弹窗时即用新默认位置
+        （设围栏时仍优先经 _anchored_rect 锚定到围栏上边）。
+        """
+        w, h = window_size
+        self._default_settings_rect = pygame.Rect(
+            w - settings.SETTINGS_WINDOW_WIDTH - settings.CHAT_WINDOW_MARGIN,
+            (h - settings.SETTINGS_WINDOW_HEIGHT) // 2,
+            settings.SETTINGS_WINDOW_WIDTH,
+            settings.SETTINGS_WINDOW_HEIGHT,
+        )
+        self._default_skin_rect = pygame.Rect(
+            w - settings.SKIN_WINDOW_WIDTH - settings.CHAT_WINDOW_MARGIN,
+            (h - settings.SKIN_WINDOW_HEIGHT) // 2,
+            settings.SKIN_WINDOW_WIDTH,
+            settings.SKIN_WINDOW_HEIGHT,
+        )
+        cw, ch = self._creator_size
+        self._default_creator_rect = pygame.Rect(
+            (w - cw) // 2, (h - ch) // 2, cw, ch
+        )
 
     # ----- 状态查询（供 Game 决定帧率/暂停自主行为） -----
 
@@ -285,6 +315,12 @@ class UIManager:
             self.stats_panel.hide()
             if self._on_fence_toggle is not None:
                 self._on_fence_toggle()
+            return
+
+        # 围栏显隐：一键隐藏/显示围栏边框。保持面板打开，便于即时看到效果并连续切换
+        if action == "fence_view":
+            if self._on_fence_view_toggle is not None:
+                self._on_fence_view_toggle()
             return
 
         event_type = _PANEL_INTERACTION_TYPES.get(action)
@@ -537,8 +573,13 @@ class UIManager:
         force = None
         if self._popup_anchor is not None:
             force = self._popup_anchor((settings.STATS_PANEL_WIDTH, settings.STATS_PANEL_WIDTH))
+        # 围栏显隐按钮的动态文案（隐藏围栏 / 显示围栏）
+        button_labels = None
+        if self._fence_view_label is not None:
+            button_labels = {"fence_view": self._fence_view_label()}
         self.stats_panel.draw(
-            screen, self.pet_sprite.rect, self._stats_lines(), force_topleft=force
+            screen, self.pet_sprite.rect, self._stats_lines(),
+            force_topleft=force, button_labels=button_labels,
         )
         self.speech_bubble.draw(screen, self.pet_sprite.rect)
         self.chat_window.draw(screen)

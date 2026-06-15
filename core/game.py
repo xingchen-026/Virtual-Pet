@@ -165,11 +165,17 @@ class Game:
                 *self.desktop_manager.get_screen_size(), inset=self.window.center
             )
 
-        # 恢复上次保存的电子围栏，限定自主漫游范围
+        # 恢复上次保存的电子围栏（窗口模式切换需 UI 就绪，故延后到 __init__ 末尾）。
+        # 退化（过小）的存档围栏直接忽略，避免窗口缩成一个点导致无法操作。
         saved_fence = self.user_config.get("fence")
-        if saved_fence:
+        if saved_fence and not self._fence_too_small(tuple(saved_fence)):
             self.fence_controller.fence = tuple(saved_fence)
-            self.autonomous_manager.movement.set_fence(tuple(saved_fence))
+        # 围栏边框是否显示（可一键隐藏，持久化）
+        self._fence_visible = self.user_config.get("fence_visible", True)
+        # 是否处于围栏「全屏取点态」（点两个对角定围栏）
+        self._fence_selecting = False
+        # 喂食放置是否借用了全屏遮罩（无围栏时铺满全屏，结束后恢复跟随窗口）
+        self._feed_overlay = False
 
         # 界面字体：必须使用含中文字形的系统字体（settings.UI_FONT_NAMES），
         # 否则聊天窗口/面板中的中文会渲染为方块乱码
@@ -208,6 +214,8 @@ class Game:
             ),
             on_feed_place_start=self._start_feed_placement,
             on_fence_toggle=self._toggle_fence,
+            on_fence_view_toggle=self._toggle_fence_view,
+            fence_view_label=self._fence_view_label,
             on_quit=self._request_quit,
             popup_anchor=self._popup_topleft,
         )
@@ -220,6 +228,11 @@ class Game:
             on_save=lambda: self._tray_actions.put("save"),
             on_exit=lambda: self._tray_actions.put("exit"),
         )
+
+        # 启动时若已存有围栏，直接进入围栏窗口模式（窗口=围栏矩形、固定、宠物在内漫游）。
+        # 须在 self.window / self.ui 构造完成之后进行（依赖窗口几何与 UI 画布尺寸联动）。
+        if self.fence_controller.fence is not None:
+            self._enter_fence_mode(self.fence_controller.fence)
 
     def _build_animation_manager(self) -> AnimationManager:
         """根据配置加载各动画状态的帧资源，构建 AnimationManager。
@@ -328,9 +341,11 @@ class Game:
 
         active = (
             self.interaction_manager.dragging
+            or self._fence_selecting
             or self.ui.is_active
             or self.autonomous_manager.movement.has_target()
             or self.feeding.placing
+            or self.feeding.has_food
         )
         return settings.FPS if active else settings.IDLE_FPS
 
@@ -344,6 +359,10 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+                continue
+
+            # 围栏全屏取点态：左键点两个对角/右键或 Esc 取消，优先消化
+            if self._fence_selecting and self._handle_fence_selection(event):
                 continue
 
             # 喂食放置模式：左键放下/右键取消/移出围栏自动取消，优先消化
@@ -387,6 +406,10 @@ class Game:
         if interaction_event.type == InteractionEventType.DRAG_MOVE:
             if self.window.dragging_window:
                 self.window.update_drag()
+            elif self.window.supported and not self.window.follow:
+                # 围栏模式：窗口固定，拖拽移动宠物本身；
+                # 交互事件的位置是画布坐标，需换算回宠物所用的屏幕坐标。
+                self.pet.set_position(*self._to_screen(interaction_event.position))
             else:
                 self.pet.set_position(*interaction_event.position)
             return
@@ -418,59 +441,199 @@ class Game:
         return (self.window.window_pos[0] + pos[0], self.window.window_pos[1] + pos[1])
 
     def _start_feed_placement(self) -> None:
-        """进入喂食放置模式（食物图标开始跟随鼠标）。"""
+        """进入喂食放置模式（食物图标开始跟随鼠标）。
+
+        放置范围 = 围栏内（已设围栏，此时窗口本就是围栏矩形）或全屏（无围栏，
+        借用全屏遮罩，使食物可放在桌面任意处，而不局限于宠物周围的小窗口）。
+        """
         self.feeding.start_placing()
+        if self.fence_controller.fence is None:
+            self._feed_overlay = True
+            self._enter_fullscreen_overlay()
+
+    def _end_feed_placement(self) -> None:
+        """退出喂食放置：已放下的食物保留；若借用了全屏遮罩则恢复跟随窗口。"""
+        self.feeding.cancel_placing()
+        if self._feed_overlay:
+            self._feed_overlay = False
+            self._enter_follow_mode()
 
     def _handle_feed_placement(self, event) -> bool:
-        """放置模式下的鼠标事件：左键放下、右键取消、移出围栏自动取消。
+        """放置模式下的鼠标事件：左键放下（可连续放多个）、右键退出、移出围栏退出。
 
         返回 True 表示已消化（主循环不再交给界面/交互系统处理）。
         """
         if event.type == pygame.MOUSEMOTION:
             if not self.fence_controller.contains(self._to_screen(event.pos)):
-                self.feeding.cancel_placing()
+                self._end_feed_placement()
             return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             screen = self._to_screen(event.pos)
-            if self.fence_controller.contains(screen):
-                self.feeding.place(screen)
+            if not self.fence_controller.contains(screen):
+                self._end_feed_placement()
+                return True
+            if self.feeding.is_full(settings.FOOD_MAX_COUNT):
+                # 达到食物上限：忽略本次放置但保持放置模式，给气泡提示
+                self.ui.show_bubble("我已经有好多吃的啦，先吃完这些再喂吧~")
+                return True
+            self.feeding.add(screen, settings.FOOD_MAX_COUNT)  # 保持放置模式，可继续放下一个
+            # 当前没有正在走向的食物时，立即以这份为目标
+            if self.autonomous_manager.food_target is None:
                 self.autonomous_manager.food_target = screen
-                if self.behavior.is_sleeping:
-                    self.behavior.stop_sleep()
-            else:
-                self.feeding.cancel_placing()
+            if self.behavior.is_sleeping:
+                self.behavior.stop_sleep()
             return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-            self.feeding.cancel_placing()
+            self._end_feed_placement()
             return True
 
         return False
 
-    def _on_food_reached(self) -> None:
-        """宠物走到食物处：复用喂食交互管线吃掉食物，并清除食物。"""
+    def _on_food_reached(self, point) -> None:
+        """宠物走到一份食物处：移除该份、复用喂食管线吃掉，还有剩余则走向下一个。"""
+        self.feeding.remove(point)
         self._dispatch_interaction(InteractionEvent(type=InteractionEventType.FEED))
-        self.feeding.clear_food()
+        if self.feeding.foods:
+            self.autonomous_manager.food_target = self.feeding.foods[0]
 
     # ----- 电子围栏 -----
 
     def _toggle_fence(self) -> None:
-        """处理面板「围栏」点击：取点/设定/清除，应用到漫游范围、持久化并提示。"""
-        status = self.fence_controller.toggle(self.pet.position)
-        if status == "set":
-            self.autonomous_manager.movement.set_fence(self.fence_controller.fence)
-        elif status == "cleared":
-            self.autonomous_manager.movement.clear_fence()
+        """处理面板「围栏」点击：已有围栏则清除并恢复跟随窗口；否则进入全屏取点态。"""
+        if self.fence_controller.fence is not None:
+            self.fence_controller.clear()
+            self._enter_follow_mode()
+            self._save_user_config()
+            self.ui.show_bubble(settings.FENCE_MESSAGES["cleared"])
+            return
+
+        self._fence_selecting = True
+        self.fence_controller.clear()  # 清掉可能残留的待定取点
+        self._enter_fullscreen_overlay()
+        self.ui.show_bubble(settings.FENCE_MESSAGES["start"])
+
+    def _handle_fence_selection(self, event) -> bool:
+        """全屏取点态下的事件：左键点两个对角定围栏、右键 / Esc 取消。
+
+        返回 True 表示已消化（主循环不再交给界面/交互系统处理）。
+        """
+        if event.type == pygame.MOUSEMOTION:
+            return True  # 橡皮筋预览终点用实时鼠标位置，无需存储
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            status = self.fence_controller.toggle(self._to_screen(event.pos))
+            if status == "set":
+                # 两角太近（如误双击）得到的极小围栏直接拒绝，留在取点态重选
+                if self._fence_too_small(self.fence_controller.fence):
+                    self.fence_controller.clear()
+                    self.ui.show_bubble(settings.FENCE_MESSAGES["too_small"])
+                    return True
+                self._fence_selecting = False
+                self._enter_fence_mode(self.fence_controller.fence)
+                self._save_user_config()
+            self.ui.show_bubble(settings.FENCE_MESSAGES[status])
+            return True
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+            self._cancel_fence_selection()
+            return True
+
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self._cancel_fence_selection()
+            return True
+
+        return False
+
+    def _cancel_fence_selection(self) -> None:
+        """取消全屏取点：清空待定取点、恢复跟随窗口、提示。"""
+        self._fence_selecting = False
+        self.fence_controller.clear()
+        self._enter_follow_mode()
+        self.ui.show_bubble(settings.FENCE_MESSAGES["cancelled"])
+
+    # ----- 窗口三态切换（跟随 / 全屏遮罩 / 围栏固定） -----
+
+    @staticmethod
+    def _fence_too_small(fence) -> bool:
+        """围栏任一边长是否小于最小值（拒绝误双击产生的退化围栏）。"""
+        x1, y1, x2, y2 = fence
+        return (x2 - x1) < settings.FENCE_MIN_SIZE or (y2 - y1) < settings.FENCE_MIN_SIZE
+
+    def _apply_window_geometry(self, width: int, height: int, x: int, y: int) -> None:
+        """运行时把游戏窗口缩放为 (width, height) 并移动到屏幕 (x, y)。
+
+        pygame.display.set_mode 重建显示表面后，分层透明/置顶/句柄可能变化，
+        交由 DesktopManager.reapply_after_resize 统一重新应用。
+        """
+        self.screen = pygame.display.set_mode((width, height), pygame.NOFRAME)
+        self.desktop_manager.reapply_after_resize(x, y)
+
+    def _enter_fullscreen_overlay(self) -> None:
+        """铺满整屏的遮罩：围栏取点 / 无围栏喂食放置共用，可在桌面任意处交互。
+
+        改用统一半透明（LWA_ALPHA）而非颜色键透明，否则空白处的点击会穿透到桌面、
+        无法取点/放置（颜色键透明的像素是"点击穿透"的）。
+        """
+        sw, sh = self.desktop_manager.get_screen_size()
+        self._apply_window_geometry(sw, sh, 0, 0)
+        self.window.set_geometry((sw, sh), (0, 0), follow=False)
+        self.desktop_manager.set_overlay_alpha(settings.OVERLAY_ALPHA)
+        self.ui.set_canvas_size((sw, sh))
+
+    def _enter_fence_mode(self, fence) -> None:
+        """进入围栏固定模式：窗口缩成围栏矩形、定位在围栏左上角、不再跟随。
+
+        漫游范围用半个精灵尺寸内缩的围栏夹取，保证宠物精灵始终完整落在窗口内；
+        宠物若不在围栏内（如刚框在别处或重启恢复）则移动到围栏中心。
+        """
+        x1, y1, x2, y2 = fence
+        w, h = x2 - x1, y2 - y1
+        self._apply_window_geometry(w, h, x1, y1)
+        self.window.set_geometry((w, h), (x1, y1), follow=False)
+
+        sw, sh = self.desktop_manager.get_screen_size()
+        spr_w, spr_h = self.pet_sprite.image.get_size()
+        hw, hh = min(spr_w // 2, w // 2), min(spr_h // 2, h // 2)
+        self.autonomous_manager.movement.set_bounds(sw, sh, inset=(0, 0))
+        self.autonomous_manager.movement.set_fence((x1 + hw, y1 + hh, x2 - hw, y2 - hh))
+        self.ui.set_canvas_size((w, h))
+
+        if not self.fence_controller.contains(self.pet.position):
+            self.pet.set_position((x1 + x2) // 2, (y1 + y2) // 2)
+
+    def _enter_follow_mode(self) -> None:
+        """恢复跟随窗口模式：窗口回到 800×600、以宠物为中心、重新跟随漫游。"""
+        w, h = settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT
+        cx, cy = w // 2, h // 2
+        px, py = self.pet.position
+        pos = (int(px - cx), int(py - cy))
+        self._apply_window_geometry(w, h, pos[0], pos[1])
+        self.window.set_geometry((w, h), pos, follow=True)
+        self.pet_sprite.render_center = (cx, cy)
+        self.pet.set_position(pos[0] + cx, pos[1] + cy)
+
+        sw, sh = self.desktop_manager.get_screen_size()
+        self.autonomous_manager.movement.set_bounds(sw, sh, inset=self.window.center)
+        self.autonomous_manager.movement.clear_fence()
+        self.ui.set_canvas_size((w, h))
+
+    def _toggle_fence_view(self) -> None:
+        """一键隐藏/显示围栏边框（不影响围栏对漫游/喂食的约束），并持久化。"""
+        self._fence_visible = not self._fence_visible
         self._save_user_config()
-        self.ui.show_bubble(settings.FENCE_MESSAGES[status])
+
+    def _fence_view_label(self) -> str:
+        """围栏显隐按钮的动态文案。"""
+        return "隐藏围栏" if self._fence_visible else "显示围栏"
 
     def _popup_topleft(self, popup_size):
         """设围栏后弹窗统一锚点（窗口画布坐标）；无围栏返回 None 沿用默认停靠。"""
         return popup_topleft(
             self.fence_controller.fence,
             self.window.window_pos,
-            (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT),
+            self.screen.get_size(),
             popup_size,
         )
 
@@ -491,6 +654,7 @@ class Game:
         # 例外：已放下食物时即使危急也要让宠物走过去吃，故危急豁免。
         interaction_active = (
             self.interaction_manager.dragging
+            or self._fence_selecting
             or self.ui.blocks_autonomous
             or self.behavior.is_sleeping
             or (self.behavior.is_critical and not self.feeding.has_food)
@@ -520,6 +684,7 @@ class Game:
         self.user_config["reminder_interval_minutes"] = self.ui.reminder_interval_minutes
         fence = self.fence_controller.fence
         self.user_config["fence"] = list(fence) if fence else None
+        self.user_config["fence_visible"] = self._fence_visible
         if self.window.supported:
             self.user_config["window_position"] = list(self.window.window_pos)
         save_json(settings.USER_CONFIG_FILE, self.user_config)
@@ -545,27 +710,62 @@ class Game:
         self._topmost_timer.update(dt)
 
     def _render(self):
-        """渲染当前帧：填充背景（透明色键或白色）、绘制宠物精灵与界面窗口。"""
-        if self.desktop_manager.supported and self.desktop_config.get("transparent", False):
+        """渲染当前帧：填充背景（遮罩压暗色 / 透明色键 / 白色）、绘制宠物精灵与界面窗口。"""
+        if self._fence_selecting or self._feed_overlay:
+            # 全屏遮罩态：窗口为统一半透明，填非色键的压暗色（否则色键会扣成透明）
+            background_color = settings.OVERLAY_BG_COLOR
+        elif self.desktop_manager.supported and self.desktop_config.get("transparent", False):
             background_color = settings.TRANSPARENT_COLOR_KEY
         else:
             background_color = (255, 255, 255)
 
         self.screen.fill(background_color)
+        self._draw_fence(self.screen)
         self.pet_sprite.draw(self.screen)
         self._draw_food(self.screen)
         self.ui.draw(self.screen)
         pygame.display.flip()
 
+    def _draw_fence(self, screen) -> None:
+        """绘制围栏边框（仅边框，内部保持透明色键以透出桌面）。
+
+        取点态下画从第一个角到当前鼠标的橡皮筋预览框；已设围栏时画其边框。
+        围栏为屏幕坐标，转换到窗口画布坐标后绘制（取点态窗口左上角为 (0,0)）。
+        """
+        wx, wy = self.window.window_pos
+
+        if self._fence_selecting:
+            # 沿整块画布（=全屏遮罩）画一圈边框，直观提示"可在整个屏幕范围内框选"
+            cw, ch = screen.get_size()
+            pygame.draw.rect(
+                screen, settings.FENCE_BORDER_COLOR, pygame.Rect(0, 0, cw, ch), 1
+            )
+            pending = self.fence_controller.pending
+            if pending is not None:
+                px, py = pending[0] - wx, pending[1] - wy
+                mx, my = pygame.mouse.get_pos()
+                rect = pygame.Rect(min(px, mx), min(py, my), abs(mx - px), abs(my - py))
+                pygame.draw.rect(
+                    screen, settings.FENCE_BORDER_COLOR, rect, settings.FENCE_BORDER_WIDTH
+                )
+            return
+
+        fence = self.fence_controller.fence
+        if not fence or not self._fence_visible:
+            return
+        x1, y1, x2, y2 = fence
+        rect = pygame.Rect(x1 - wx, y1 - wy, x2 - x1, y2 - y1)
+        pygame.draw.rect(
+            screen, settings.FENCE_BORDER_COLOR, rect, settings.FENCE_BORDER_WIDTH
+        )
+
     def _draw_food(self, screen) -> None:
-        """绘制食物图标：放置模式下跟随鼠标；已放下时固定在其屏幕位置。"""
+        """绘制食物图标：已放下的每一份固定在其屏幕位置；放置模式下另画跟随鼠标的一份。"""
+        wx, wy = self.window.window_pos
+        for fx, fy in self.feeding.foods:
+            food_icon.draw_food(screen, (fx - wx, fy - wy))
         if self.feeding.placing:
             food_icon.draw_food(screen, pygame.mouse.get_pos())
-        elif self.feeding.has_food:
-            fx, fy = self.feeding.food_position
-            food_icon.draw_food(
-                screen, (fx - self.window.window_pos[0], fy - self.window.window_pos[1])
-            )
 
     def _quit(self):
         """停止系统托盘、保存宠物数据与用户偏好并安全退出 Pygame 与程序。"""

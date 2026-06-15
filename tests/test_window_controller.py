@@ -83,6 +83,47 @@ def test_sync_to_pet_moves_window_under_pet():
     assert wc.window_pos == (600, 400)
 
 
+def test_set_geometry_recenters_and_switches_mode():
+    wc, desktop, pet, sprite = _make(position=(500, 300))
+    wc.initialize()
+    wc.set_geometry((600, 400), (200, 100), follow=False)
+    assert wc.center == (300, 200)
+    assert wc.window_pos == (200, 100)
+    assert wc.follow is False
+
+
+def test_fixed_mode_sync_updates_render_center_not_window():
+    # 围栏固定模式：窗口不动，宠物在固定窗口内按 (pet - window_pos) 渲染
+    wc, desktop, pet, sprite = _make(position=(500, 300))
+    wc.initialize()
+    wc.set_geometry((600, 400), (200, 100), follow=False)
+
+    pos_before = desktop.get_position()
+    pet.set_position(450, 360)
+    wc.sync_to_pet()
+    assert desktop.get_position() == pos_before  # sync 不移动窗口（固定模式）
+    assert sprite.render_center == (450 - 200, 360 - 100)  # (250, 260)
+
+
+def test_fixed_mode_disables_window_drag():
+    wc, desktop, pet, sprite = _make(position=(500, 300))
+    wc.initialize()
+    wc.set_geometry((600, 400), (200, 100), follow=False)
+    wc.begin_drag()
+    assert not wc.dragging_window  # 固定模式下不进行窗口拖拽
+
+
+def test_follow_mode_restored_keeps_center_invariant():
+    wc, desktop, pet, sprite = _make(position=(500, 300))
+    wc.initialize()
+    wc.set_geometry((600, 400), (200, 100), follow=False)
+    # 恢复跟随模式后仍维持"窗口中心 = 宠物"
+    wc.set_geometry(WINDOW_SIZE, (300, 200), follow=True)
+    pet.set_position(1000, 700)
+    wc.sync_to_pet()
+    assert desktop.get_position() == (1000 - CENTER[0], 700 - CENTER[1])
+
+
 def test_unsupported_platform_is_noop():
     wc, desktop, pet, sprite = _make(supported=False, position=(0, 0))
     wc.initialize([100, 80])

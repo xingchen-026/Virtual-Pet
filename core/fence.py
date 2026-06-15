@@ -1,9 +1,9 @@
 """电子围栏模块。
 
-FenceController 是围栏的纯逻辑状态机：用户在右键面板点「围栏」时，
-以宠物当前位置依次记录两个对角点，两点成矩形，限定宠物自主漫游范围；
-已有围栏时再点即清除。所有坐标与 Pet.position 同坐标系（窗口跟随模式下
-为屏幕坐标，否则为窗口坐标），状态变更不涉及任何渲染或 OS 调用，便于单测。
+FenceController 是围栏的纯逻辑状态机：用户在右键面板点「围栏」后进入全屏
+取点态，鼠标依次点击两个对角点（经 toggle 记录），两点成矩形，限定宠物
+自主漫游范围；已有围栏时点按钮走 clear 清除。所有坐标与 Pet.position 同坐标系
+（窗口跟随模式下为屏幕坐标），状态变更不涉及任何渲染或 OS 调用，便于单测。
 
 popup_topleft 是一个纯函数：设围栏后，把弹出界面统一锚定到围栏上边两角，
 选能在画布内完整显示的一侧，使所有弹窗出现在同一基点，避免鼠标来回移动。
@@ -23,6 +23,16 @@ class FenceController:
     def __init__(self) -> None:
         self.fence: Optional[Rect] = None
         self._pending: Optional[Point] = None
+
+    @property
+    def pending(self) -> Optional[Point]:
+        """取点中已记录的第一个角（供绘制橡皮筋预览框），未记录时为 None。"""
+        return self._pending
+
+    def clear(self) -> None:
+        """清除围栏与待定取点（已设围栏时点按钮走此路径）。"""
+        self.fence = None
+        self._pending = None
 
     def toggle(self, point: Point) -> str:
         """处理一次「围栏」点击，返回状态：
