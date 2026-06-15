@@ -84,6 +84,20 @@ def test_add_exp_noop_for_nonpositive():
     assert pet.level == 1 and pet.exp == 0
 
 
+def test_title_by_level():
+    pet = Pet()
+    assert pet.title() == settings.LEVEL_TITLES[0][1]  # Lv.1 -> 第一档
+    # 取 <= 当前等级的最高一档
+    pet.level = settings.LEVEL_TITLES[-1][0]  # 最高门槛
+    assert pet.title() == settings.LEVEL_TITLES[-1][1]
+    pet.level = settings.LEVEL_TITLES[-1][0] + 100  # 超过最高门槛仍为最高称号
+    assert pet.title() == settings.LEVEL_TITLES[-1][1]
+    # 中间档：取第二档门槛
+    lvl, label = settings.LEVEL_TITLES[1]
+    pet.level = lvl
+    assert pet.title() == label
+
+
 def test_level_exp_roundtrip():
     pet = Pet()
     pet.add_exp(settings.LEVEL_BASE_EXP + 7)

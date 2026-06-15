@@ -463,14 +463,23 @@ class Game:
         self.ui.record_attr_deltas(before)
         self.sound.play(INTERACTION_SOUNDS.get(interaction_event.type))
 
-        # 成长系统：正向互动积累经验，升级时庆祝（升级动画 + 音效 + 气泡）
+        # 成长系统：正向互动积累经验，升级时庆祝（升级动画 + 音效 + 气泡）；
+        # 跨成长阶段时额外提示「解锁称号」。
         gained = settings.EXP_REWARDS.get(interaction_event.type.value, 0)
-        if gained and self.pet.add_exp(gained) > 0:
-            self.behavior.trigger_temporary_animation(
-                "excited", settings.LEVELUP_ANIMATION_DURATION
-            )
-            self.sound.play("levelup")
-            self.ui.show_bubble(f"升级啦！现在是 Lv.{self.pet.level} 🎉")
+        if gained:
+            title_before = self.pet.title()
+            if self.pet.add_exp(gained) > 0:
+                self.behavior.trigger_temporary_animation(
+                    "excited", settings.LEVELUP_ANIMATION_DURATION
+                )
+                self.sound.play("levelup")
+                title_after = self.pet.title()
+                if title_after != title_before:
+                    self.ui.show_bubble(
+                        f"升级到 Lv.{self.pet.level}，解锁称号「{title_after}」！🎉"
+                    )
+                else:
+                    self.ui.show_bubble(f"升级啦！现在是 Lv.{self.pet.level} 🎉")
 
         log_message = INTERACTION_LOG_MESSAGES.get(interaction_event.type)
         if log_message is not None:

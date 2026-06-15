@@ -28,7 +28,15 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：无（美术升级路线 #2–#5 全部完成，并已发布 **GitHub Release v1.1.0**）。
+- **正在进行**：美术资源（AI 生成）调研中——见下「下一步候选·美术」。
+- **最近一次完成**（未提交）：**等级解锁玩法 + 记忆遗忘策略**：
+  ①等级解锁——`settings.LEVEL_TITLES` 成长阶段称号（幼崽→…→传说），`Pet.title()` 取 <= 等级最高档；
+  数值面板显示「Lv.N 称号」，注入 AI `pet_state_prompt`（人格随成长成熟），跨阶段升级弹「解锁称号」气泡
+  （`Game._dispatch_interaction` 比较升级前后称号）。
+  ②记忆遗忘——`MemoryManager._prune_long_term_locked`：淡忘超过 `MEMORY_FORGET_DAYS`(30) 天的长期记忆，
+  但始终保护最新 `MEMORY_MIN_KEEP`(10) 条、无日期条目不淡忘；add_summary/add_event 与启动时调用（`_age_days` 辅助）。
+  `tests/test_pet.py`（称号）+ `tests/test_memory.py`（_age_days/遗忘）共 +4（165→169）。
+- **更早一次完成**（`4120d31`，已 push；发布 **Release v1.1.0** 带 `VirtualPet.exe` 37.6MB）：**发布 v1.1.0**——
 - **最近一次完成**（`4120d31`，已 push；发布 **Release v1.1.0** 带 `VirtualPet.exe` 37.6MB）：**发布 v1.1.0**——
   干净 venv（含 pyttsx3）重打 onefile exe（38MB），`build_exe.py` 加 pyttsx3/comtypes/sapi5 隐藏导入；
   空目录冒烟：自动播种、ai_config 空 Key、无 error.log、TTS 驱动已打入（warn 文件无 sapi5 缺失）。

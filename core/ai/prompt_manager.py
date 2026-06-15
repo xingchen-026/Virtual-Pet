@@ -49,6 +49,7 @@ _SYSTEM_PROMPT_TEMPLATE = (
 _PET_STATE_TEMPLATE = (
     "当前宠物状态：心情 {mood:.0f}/100，饥饿 {hunger:.0f}/100，"
     "体力 {energy:.0f}/100，行为状态 {state}。"
+    "你已成长到 Lv.{level}（{title}阶段），说话可自然体现与该成长阶段相称的成熟度。"
 )
 
 
@@ -84,6 +85,8 @@ class PromptManager:
             hunger=pet.hunger,
             energy=pet.energy,
             state=pet.current_state.name,
+            level=pet.level,
+            title=pet.title(),
         )
 
     def summary_messages(self, dialogues: List[Dict[str, str]]) -> List[Dict[str, str]]:

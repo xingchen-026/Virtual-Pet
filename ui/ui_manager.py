@@ -677,7 +677,7 @@ class UIManager:
         """
         return [
             f"名称: {self.pet.name}",
-            f"等级: Lv.{self.pet.level}  ({self.pet.exp:g}/{self.pet.exp_to_next()})",
+            f"等级: Lv.{self.pet.level} {self.pet.title()}  ({self.pet.exp:g}/{self.pet.exp_to_next()})",
             f"饥饿: {self.pet.hunger:.1f}{self._attr_delta_suffix('hunger')}",
             f"心情: {self.pet.mood:.1f}{self._attr_delta_suffix('mood')}",
             f"体力: {self.pet.energy:.1f}{self._attr_delta_suffix('energy')}",

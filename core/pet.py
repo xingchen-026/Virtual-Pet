@@ -108,6 +108,16 @@ class Pet:
         """升到下一级所需的经验值（随等级线性增长）。"""
         return settings.LEVEL_BASE_EXP * self.level
 
+    def title(self) -> str:
+        """当前等级对应的成长称号（取 settings.LEVEL_TITLES 中 <= 等级的最高一档）。"""
+        name = settings.LEVEL_TITLES[0][1]
+        for min_level, label in settings.LEVEL_TITLES:
+            if self.level >= min_level:
+                name = label
+            else:
+                break
+        return name
+
     def add_exp(self, amount: float) -> int:
         """累加经验并结算升级，返回本次升了几级（0 表示未升级）。
 

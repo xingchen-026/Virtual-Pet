@@ -33,8 +33,24 @@ SHORT_TERM_LIMIT = 3
 # 长期记忆最多保留的条数（习惯摘要 + 重要事件，超限丢弃最旧的）
 LONG_TERM_LIMIT = 100
 
+# 遗忘策略：长期记忆中超过该天数的条目会被淡忘（模拟"久远的事会忘"），
+# 但始终保护最新 MEMORY_MIN_KEEP 条，避免长期未互动后记忆被清空。
+MEMORY_FORGET_DAYS = 30
+MEMORY_MIN_KEEP = 10
+
 # 拼接进 Prompt 时取最近的长期记忆条数
 _PROMPT_LONG_TERM_LIMIT = 8
+
+
+def _age_days(time_str: Optional[str], now: datetime) -> Optional[int]:
+    """长期记忆条目的天数年龄；时间缺失/无法解析时返回 None（视为不可淡忘）。"""
+    if not time_str:
+        return None
+    try:
+        recorded = datetime.strptime(time_str, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+    return (now.date() - recorded.date()).days
 
 
 class MemoryManager:
@@ -50,6 +66,8 @@ class MemoryManager:
         data = load_json(self._file_path) or {}
         self.short_term: List[Dict[str, str]] = list(data.get("short_term", []))
         self.long_term: List[Dict[str, str]] = list(data.get("long_term", []))
+        # 启动即淡忘过于久远的长期记忆（长期未互动后重启会自动清理陈旧记忆）
+        self._prune_long_term_locked()
 
     def add_dialogue(self, user_message: str, pet_reply: str) -> None:
         """记录一轮对话，仅保留最近 SHORT_TERM_LIMIT 轮。"""
@@ -69,6 +87,7 @@ class MemoryManager:
                 "summary": summary,
                 "time": datetime.now().strftime("%Y-%m-%d"),
             })
+            self._prune_long_term_locked()
             self._trim_long_term_locked()
             self._save_locked()
 
@@ -80,6 +99,7 @@ class MemoryManager:
                 "time": datetime.now().strftime("%Y-%m-%d"),
                 "emotion": emotion,
             })
+            self._prune_long_term_locked()
             self._trim_long_term_locked()
             self._save_locked()
 
@@ -114,6 +134,24 @@ class MemoryManager:
     def _trim_long_term_locked(self) -> None:
         if len(self.long_term) > LONG_TERM_LIMIT:
             self.long_term = self.long_term[-LONG_TERM_LIMIT:]
+
+    def _prune_long_term_locked(self, now: Optional[datetime] = None) -> None:
+        """遗忘策略：淡忘超过 MEMORY_FORGET_DAYS 天的长期记忆。
+
+        始终保护最新 MEMORY_MIN_KEEP 条（不论年龄）；其余条目按记录日期淘汰，
+        时间缺失/无法解析的条目保留（无法判断年龄就不淡忘）。调用方须持有锁。
+        """
+        now = now or datetime.now()
+        if len(self.long_term) <= MEMORY_MIN_KEEP:
+            return
+
+        protected = self.long_term[-MEMORY_MIN_KEEP:]
+        older = self.long_term[:-MEMORY_MIN_KEEP]
+        kept = [
+            item for item in older
+            if (_age_days(item.get("time"), now) or 0) <= MEMORY_FORGET_DAYS
+        ]
+        self.long_term = kept + protected
 
     def _save_locked(self) -> None:
         """实际执行文件写入，调用方必须已持有 self._lock。"""

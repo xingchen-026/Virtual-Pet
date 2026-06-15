@@ -1,9 +1,17 @@
-"""MemoryManager 上限、持久化与并发写入的回归测试。"""
+"""MemoryManager 上限、持久化、遗忘策略与并发写入的回归测试。"""
 
 import json
 import threading
+from datetime import datetime, timedelta
 
-from core.ai.memory import LONG_TERM_LIMIT, SHORT_TERM_LIMIT, MemoryManager
+from core.ai.memory import (
+    LONG_TERM_LIMIT,
+    MEMORY_FORGET_DAYS,
+    MEMORY_MIN_KEEP,
+    SHORT_TERM_LIMIT,
+    MemoryManager,
+    _age_days,
+)
 
 
 def test_short_term_capped(tmp_path):
@@ -20,6 +28,45 @@ def test_long_term_capped(tmp_path):
     for i in range(LONG_TERM_LIMIT + 20):
         memory.add_event(f"event-{i}")
     assert len(memory.long_term) == LONG_TERM_LIMIT
+
+
+def test_age_days_parsing():
+    now = datetime(2026, 6, 15)
+    assert _age_days("2026-06-15", now) == 0
+    assert _age_days("2026-05-16", now) == 30
+    assert _age_days(None, now) is None
+    assert _age_days("乱码", now) is None
+
+
+def test_forget_prunes_old_beyond_min_keep(tmp_path):
+    memory = MemoryManager(str(tmp_path / "mem.json"))
+    now = datetime.now()
+    old_day = (now - timedelta(days=MEMORY_FORGET_DAYS + 10)).strftime("%Y-%m-%d")
+    # 构造：很多条陈旧记忆（手填旧日期）+ 最新若干条
+    memory.long_term = [
+        {"summary": f"old-{i}", "time": old_day} for i in range(MEMORY_MIN_KEEP + 8)
+    ]
+    memory._prune_long_term_locked(now=now)
+    # 超出保护区且陈旧的被淡忘；保护区（最新 MEMORY_MIN_KEEP 条）保留
+    assert len(memory.long_term) == MEMORY_MIN_KEEP
+    assert memory.long_term[-1]["summary"] == f"old-{MEMORY_MIN_KEEP + 7}"
+
+
+def test_forget_keeps_recent_and_undateable(tmp_path):
+    memory = MemoryManager(str(tmp_path / "mem.json"))
+    now = datetime.now()
+    fresh = now.strftime("%Y-%m-%d")
+    old = (now - timedelta(days=MEMORY_FORGET_DAYS + 5)).strftime("%Y-%m-%d")
+    memory.long_term = (
+        [{"summary": "old-dated", "time": old}]          # 陈旧、在保护区外 -> 淡忘
+        + [{"summary": "no-date"}]                        # 无日期 -> 保留
+        + [{"summary": f"recent-{i}", "time": fresh} for i in range(MEMORY_MIN_KEEP)]
+    )
+    memory._prune_long_term_locked(now=now)
+    summaries = [m["summary"] for m in memory.long_term]
+    assert "old-dated" not in summaries
+    assert "no-date" in summaries
+    assert sum(s.startswith("recent-") for s in summaries) == MEMORY_MIN_KEEP
 
 
 def test_persistence_roundtrip(tmp_path):
