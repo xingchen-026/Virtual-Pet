@@ -33,7 +33,15 @@ _DATAS = [
     ("config/ai_config.template.json", "config"),
 ]
 
-_HIDDEN = ["pystray._win32"]
+# pystray 与 pyttsx3 的平台后端用动态导入加载，PyInstaller 静态分析发现不了，需显式声明
+_HIDDEN = [
+    "pystray._win32",
+    "pyttsx3.drivers",
+    "pyttsx3.drivers.sapi5",
+    "comtypes",
+    "comtypes.client",
+    "comtypes.stream",
+]
 
 # 排除体积大且非运行期必需的库，避免误打进 exe 让体积暴涨。
 # scipy 仅用于皮肤网格切分的可选碎片剔除（spritesheet 已做缺失降级）；
