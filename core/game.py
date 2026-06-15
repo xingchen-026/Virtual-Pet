@@ -69,6 +69,7 @@ from core.desktop import DesktopManager
 from core.event import InteractionEvent, InteractionEventType
 from core.feeding import FeedingController
 from core.fence import FenceController, popup_topleft
+from core.sound import SoundManager
 from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
@@ -92,6 +93,16 @@ INTERACTION_LOG_MESSAGES = {
     InteractionEventType.BATH: "User bathed pet",
     InteractionEventType.SLEEP: "User put pet to sleep",
     InteractionEventType.GIFT: "User gave pet a gift",
+}
+
+# 交互类型 -> 音效名（core/sound.py 的 EVENT_NOTES 键）；未列出的交互不发声
+INTERACTION_SOUNDS = {
+    InteractionEventType.CLICK: "click",
+    InteractionEventType.EXCITED: "excited",
+    InteractionEventType.FEED: "feed",
+    InteractionEventType.PLAY: "play",
+    InteractionEventType.BATH: "bath",
+    InteractionEventType.GIFT: "gift",
 }
 
 
@@ -151,6 +162,12 @@ class Game:
 
         # 用户偏好（宠物大小、窗口位置等），整局共用一份，退出时合并写回
         self.user_config = load_json(settings.USER_CONFIG_FILE) or {}
+
+        # 互动音效（程序化合成，离线自包含；音频不可用时静默降级）
+        self.sound = SoundManager(
+            enabled=self.user_config.get("sound_enabled", settings.SOUND_ENABLED),
+            volume=settings.SOUND_VOLUME,
+        )
 
         # 窗口跟随控制器：维护"窗口中心 = 宠物屏幕坐标"，集中处理窗口移动/拖拽。
         # 优先使用上次退出时保存的窗口位置，否则用 desktop_manager 的初始位置
@@ -220,6 +237,7 @@ class Game:
             proactive_interval_minutes=self.user_config.get(
                 "proactive_interval_minutes", settings.PROACTIVE_CHAT_INTERVAL_MINUTES
             ),
+            sound_enabled=self.user_config.get("sound_enabled", settings.SOUND_ENABLED),
             on_feed_place_start=self._start_feed_placement,
             on_fence_toggle=self._toggle_fence,
             on_fence_view_toggle=self._toggle_fence_view,
@@ -435,6 +453,7 @@ class Game:
 
         self.behavior.trigger_temporary_animation(result.animation, result.duration)
         self.ui.record_attr_deltas(before)
+        self.sound.play(INTERACTION_SOUNDS.get(interaction_event.type))
 
         log_message = INTERACTION_LOG_MESSAGES.get(interaction_event.type)
         if log_message is not None:
@@ -696,6 +715,9 @@ class Game:
         self.user_config["reminder_interval_minutes"] = self.ui.reminder_interval_minutes
         self.user_config["proactive_enabled"] = self.ui.proactive_enabled
         self.user_config["proactive_interval_minutes"] = self.ui.proactive_interval_minutes
+        # 音效开关：从 UI 读回当前值、持久化，并即时应用到 SoundManager
+        self.user_config["sound_enabled"] = self.ui.sound_enabled
+        self.sound.set_enabled(self.ui.sound_enabled)
         fence = self.fence_controller.fence
         self.user_config["fence"] = list(fence) if fence else None
         self.user_config["fence_visible"] = self._fence_visible

@@ -85,6 +85,7 @@ class UIManager:
         reminder_interval_minutes: float = settings.REST_REMINDER_INTERVAL_MINUTES,
         proactive_enabled: bool = settings.PROACTIVE_CHAT_ENABLED,
         proactive_interval_minutes: float = settings.PROACTIVE_CHAT_INTERVAL_MINUTES,
+        sound_enabled: bool = settings.SOUND_ENABLED,
         on_feed_place_start: Callable[[], None] = None,
         on_fence_toggle: Callable[[], None] = None,
         on_fence_view_toggle: Callable[[], None] = None,
@@ -127,6 +128,9 @@ class UIManager:
         # 结果经队列回主循环显示；离线则用状态化文案降级。
         self.proactive_enabled = proactive_enabled
         self.proactive_interval_minutes = proactive_interval_minutes
+        # 音效开关（实际播放在 Game 的 SoundManager；此处仅承载设置窗口的编辑值，
+        # 保存后经 on_user_prefs_changed 让 Game 应用并持久化）
+        self.sound_enabled = sound_enabled
         self._proactive_timer = IntervalTimer(
             self._proactive_seconds(), self._trigger_proactive
         )
@@ -359,6 +363,7 @@ class UIManager:
                 reminder_interval=self.reminder_interval_minutes,
                 proactive_enabled=self.proactive_enabled,
                 proactive_interval=self.proactive_interval_minutes,
+                sound_enabled=self.sound_enabled,
             )
             self.stats_panel.hide()
             self.desktop_manager.focus()
@@ -456,6 +461,8 @@ class UIManager:
         self.proactive_interval_minutes = result["proactive_interval"]
         self._proactive_timer.interval = self._proactive_seconds()
         self._proactive_timer.reset()
+        # 音效开关（实际应用与持久化在 Game._save_user_config，经下面的回调触发）
+        self.sound_enabled = result["sound_enabled"]
         self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒/主动互动）
 
         # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格

@@ -234,7 +234,7 @@ CHAT_WINDOW_HEIGHT = 420
 
 # 设置窗口尺寸（靠右侧停靠，垂直居中）。高度容纳「保存并退出」按钮行
 SETTINGS_WINDOW_WIDTH = 280
-SETTINGS_WINDOW_HEIGHT = 588
+SETTINGS_WINDOW_HEIGHT = 622
 
 # 皮肤选择窗口尺寸（靠右侧停靠，垂直居中；缩略图预览选择 + 缺失状态提示）
 SKIN_WINDOW_WIDTH = 300
@@ -295,6 +295,11 @@ FENCE_BORDER_WIDTH = 3
 FOOD_ICON_RADIUS = 14
 # 同时可摆放的食物上限：达到后再左键放置会被忽略并气泡提示
 FOOD_MAX_COUNT = 10
+
+# ----- 音效 -----
+# 互动音效总开关（可在设置窗口切换，存 user_config.sound_enabled）；音量 0~1
+SOUND_ENABLED = True
+SOUND_VOLUME = 0.45
 
 
 # ----- AI 主动互动（宠物基于状态/记忆/时间主动冒泡说话）-----
