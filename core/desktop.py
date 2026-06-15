@@ -41,6 +41,32 @@ if _IS_WINDOWS:
         _IS_WINDOWS = False
 
 
+def enable_dpi_awareness() -> None:
+    """让进程 DPI 感知（优先 Per-Monitor v2），使 pygame 像素与 Win32 屏幕坐标一致。
+
+    缩放显示器（如 150%）下，若进程"非感知"，系统会对窗口做位图拉伸并虚拟化坐标，
+    多显示器混合 DPI 时易出现窗口/取点坐标错位。设为感知后各坐标系统一为物理像素，
+    围栏取点、窗口定位、跨屏漫游都准确（代价是宠物按物理像素渲染、观感更小，可用设置里
+    的大小调节补偿）。必须在创建窗口（pygame.init/set_mode）之前调用；非 Windows 为空操作，
+    失败（如已被 SDL 提前设置）静默忽略。
+    """
+    if not _IS_WINDOWS:
+        return
+
+    import ctypes
+
+    for attempt in (
+        lambda: ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)),
+        lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2),
+        lambda: ctypes.windll.user32.SetProcessDPIAware(),
+    ):
+        try:
+            if attempt():
+                return
+        except Exception:
+            continue
+
+
 class DesktopManager:
     """管理桌宠窗口的桌面相关属性（透明 / 置顶 / 隐藏 / 拖动）。"""
 
@@ -240,6 +266,26 @@ class DesktopManager:
         except Exception as exc:
             log_exception(DesktopWindowError(f"读取屏幕分辨率失败: {exc}"))
             return (settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT)
+
+    def get_virtual_screen(self) -> Tuple[int, int, int, int]:
+        """返回虚拟桌面（所有显示器并集）的 (左, 上, 宽, 高)；单显示器即主屏。
+
+        多显示器时左/上可能为负（位于主屏左侧/上方的显示器）。用于全屏取点遮罩
+        覆盖所有屏幕、以及让宠物跨屏漫游。读取失败时回退到主屏 (0,0,宽,高)。
+        """
+        if not _IS_WINDOWS:
+            return (0, 0, settings.WINDOW_WIDTH, settings.WINDOW_HEIGHT)
+
+        try:
+            return (
+                win32api.GetSystemMetrics(win32con.SM_XVIRTUALSCREEN),
+                win32api.GetSystemMetrics(win32con.SM_YVIRTUALSCREEN),
+                win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN),
+                win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN),
+            )
+        except Exception as exc:
+            log_exception(DesktopWindowError(f"读取虚拟桌面尺寸失败: {exc}"))
+            return (0, 0, *self.get_screen_size())
 
     def get_cursor_position(self) -> Tuple[int, int]:
         """返回鼠标在屏幕坐标系下的位置，用于拖动窗口时计算位移。"""

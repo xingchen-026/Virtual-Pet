@@ -160,9 +160,11 @@ class Game:
         )
         self.window.initialize(self.user_config.get("window_position"))
         if self.desktop_manager.supported:
-            # 漫游目标内缩半个窗口，确保窗口（及右键面板）始终留在屏幕内
+            # 漫游范围用整个虚拟桌面（多显示器并集），宠物可跨屏漫游；
+            # 内缩半个窗口，确保窗口（及右键面板）始终留在桌面内。
+            vx, vy, vw, vh = self.desktop_manager.get_virtual_screen()
             self.autonomous_manager.movement.set_bounds(
-                *self.desktop_manager.get_screen_size(), inset=self.window.center
+                vw, vh, inset=self.window.center, origin=(vx, vy)
             )
 
         # 恢复上次保存的电子围栏（窗口模式切换需 UI 就绪，故延后到 __init__ 末尾）。
@@ -571,16 +573,17 @@ class Game:
         self.desktop_manager.reapply_after_resize(x, y)
 
     def _enter_fullscreen_overlay(self) -> None:
-        """铺满整屏的遮罩：围栏取点 / 无围栏喂食放置共用，可在桌面任意处交互。
+        """铺满整个虚拟桌面（所有显示器）的遮罩：围栏取点 / 无围栏喂食放置共用，
+        可在任意屏幕的任意处交互。
 
         改用统一半透明（LWA_ALPHA）而非颜色键透明，否则空白处的点击会穿透到桌面、
         无法取点/放置（颜色键透明的像素是"点击穿透"的）。
         """
-        sw, sh = self.desktop_manager.get_screen_size()
-        self._apply_window_geometry(sw, sh, 0, 0)
-        self.window.set_geometry((sw, sh), (0, 0), follow=False)
+        vx, vy, vw, vh = self.desktop_manager.get_virtual_screen()
+        self._apply_window_geometry(vw, vh, vx, vy)
+        self.window.set_geometry((vw, vh), (vx, vy), follow=False)
         self.desktop_manager.set_overlay_alpha(settings.OVERLAY_ALPHA)
-        self.ui.set_canvas_size((sw, sh))
+        self.ui.set_canvas_size((vw, vh))
 
     def _enter_fence_mode(self, fence) -> None:
         """进入围栏固定模式：窗口缩成围栏矩形、定位在围栏左上角、不再跟随。
@@ -593,10 +596,11 @@ class Game:
         self._apply_window_geometry(w, h, x1, y1)
         self.window.set_geometry((w, h), (x1, y1), follow=False)
 
-        sw, sh = self.desktop_manager.get_screen_size()
+        vx, vy, vw, vh = self.desktop_manager.get_virtual_screen()
         spr_w, spr_h = self.pet_sprite.image.get_size()
         hw, hh = min(spr_w // 2, w // 2), min(spr_h // 2, h // 2)
-        self.autonomous_manager.movement.set_bounds(sw, sh, inset=(0, 0))
+        # 漫游边界用虚拟桌面（支持围栏落在任意屏、含负原点），实际范围由下面的围栏夹取
+        self.autonomous_manager.movement.set_bounds(vw, vh, inset=(0, 0), origin=(vx, vy))
         self.autonomous_manager.movement.set_fence((x1 + hw, y1 + hh, x2 - hw, y2 - hh))
         self.ui.set_canvas_size((w, h))
 
@@ -614,8 +618,10 @@ class Game:
         self.pet_sprite.render_center = (cx, cy)
         self.pet.set_position(pos[0] + cx, pos[1] + cy)
 
-        sw, sh = self.desktop_manager.get_screen_size()
-        self.autonomous_manager.movement.set_bounds(sw, sh, inset=self.window.center)
+        vx, vy, vw, vh = self.desktop_manager.get_virtual_screen()
+        self.autonomous_manager.movement.set_bounds(
+            vw, vh, inset=self.window.center, origin=(vx, vy)
+        )
         self.autonomous_manager.movement.clear_fence()
         self.ui.set_canvas_size((w, h))
 

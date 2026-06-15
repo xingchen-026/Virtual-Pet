@@ -22,6 +22,8 @@ core.pet.Pet 不直接依赖 LLMClient，所有 AI 能力均通过 AIService
 
 from __future__ import annotations
 
+import datetime
+import random
 from typing import Optional
 
 from config import settings
@@ -42,6 +44,27 @@ _FIRST_FEED_EVENT = "用户第一次喂食"
 
 # 每累计多少轮对话，用 LLM 总结一次主人习惯并写入长期记忆
 _SUMMARY_EVERY = 3
+
+
+def _time_of_day_hint(hour: Optional[int] = None) -> str:
+    """把当前小时映射为时段提示词，供主动发言的 Prompt 使用。"""
+    h = datetime.datetime.now().hour if hour is None else hour
+    if 5 <= h < 11:
+        return "早上"
+    if 11 <= h < 13:
+        return "中午"
+    if 13 <= h < 18:
+        return "下午"
+    if 18 <= h < 23:
+        return "晚上"
+    return "深夜"
+
+
+def _offline_proactive_line(pet) -> str:
+    """AI 不可用时，按宠物当前动画状态随机选一句主动发言（离线降级）。"""
+    pool = settings.PROACTIVE_OFFLINE_MESSAGES
+    options = pool.get(pet.current_animation) or pool["default"]
+    return random.choice(options)
 
 
 class AIService:
@@ -135,6 +158,29 @@ class AIService:
             if len(self._summary_buffer) >= _SUMMARY_EVERY:
                 self._update_long_term_summary()
 
+        return reply
+
+    def proactive_message(self, pet) -> str:
+        """生成一句宠物「主动说」的话（供 UI 在头顶气泡显示），不针对用户输入。
+
+        结合宠物状态/记忆/时段请求 LLM；AI 不可用时按当前状态返回离线随机文案，
+        保证离线也能主动互动。会阻塞至 LLM 返回或失败，调用方应在后台线程调用。
+        不写入对话记忆（非用户对话），避免污染短期/长期记忆。
+        """
+        messages = self.prompt_manager.proactive_messages(pet, _time_of_day_hint())
+
+        try:
+            raw = self.llm_client.chat(messages)
+            self.available = True
+        except AIServiceError as exc:
+            log_exception(exc)
+            self.available = False
+            return _offline_proactive_line(pet)
+
+        reply = self.emotion_analyzer.strip_tag(raw).strip()
+        # 违规或空回复一律降级为离线文案，绝不展示原文
+        if not reply or not self.moderator.is_safe(reply):
+            return _offline_proactive_line(pet)
         return reply
 
     def _update_long_term_summary(self) -> None:

@@ -6,7 +6,14 @@
 
 import pytest
 
-from core.ai.ai_service import _FIRST_FEED_EVENT, _OFFLINE_REPLY, AIService
+from config import settings
+from core.ai.ai_service import (
+    _FIRST_FEED_EVENT,
+    _OFFLINE_REPLY,
+    AIService,
+    _offline_proactive_line,
+    _time_of_day_hint,
+)
 from core.ai.emotion_analyzer import EmotionEffect
 from core.ai.memory import MemoryManager
 from core.ai.moderation import ContentModerator
@@ -53,6 +60,45 @@ def test_chat_returns_reply_and_records_memory(tmp_path):
     assert reply == "你好呀"
     assert len(memory.short_term) == 1
     assert service.llm_client.calls  # 确实调用了 LLM
+
+
+def test_proactive_message_returns_llm_line(tmp_path):
+    service, pet, memory = _service(tmp_path, reply="主人，陪我玩嘛~")
+    line = service.proactive_message(pet)
+    assert line == "主人，陪我玩嘛~"
+    assert service.llm_client.calls  # 走了 LLM
+    assert memory.short_term == []  # 主动发言不写入对话记忆
+
+
+def test_proactive_message_offline_fallback(tmp_path):
+    # LLM 失败时返回状态化离线文案（属于该状态的候选池）
+    service, pet, memory = _service(tmp_path, fail=True)
+    pet.current_animation = "hungry"
+    line = service.proactive_message(pet)
+    assert line in settings.PROACTIVE_OFFLINE_MESSAGES["hungry"]
+    assert service.available is False
+
+
+def test_proactive_message_unsafe_replaced_by_offline(tmp_path):
+    # LLM 返回违规内容：不展示原文，降级为离线文案
+    service, pet, memory = _service(tmp_path, reply=f"哼{_BANNED}")
+    pet.current_animation = "idle"
+    line = service.proactive_message(pet)
+    assert line in settings.PROACTIVE_OFFLINE_MESSAGES["default"]
+
+
+def test_offline_proactive_line_uses_default_for_unknown_state(tmp_path):
+    service, pet, memory = _service(tmp_path)
+    pet.current_animation = "walk"  # 不在文案池里 -> default
+    assert _offline_proactive_line(pet) in settings.PROACTIVE_OFFLINE_MESSAGES["default"]
+
+
+def test_time_of_day_hint_buckets():
+    assert _time_of_day_hint(8) == "早上"
+    assert _time_of_day_hint(12) == "中午"
+    assert _time_of_day_hint(15) == "下午"
+    assert _time_of_day_hint(20) == "晚上"
+    assert _time_of_day_hint(2) == "深夜"
 
 
 def test_unsafe_user_input_blocked(tmp_path):

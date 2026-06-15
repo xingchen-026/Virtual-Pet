@@ -120,6 +120,14 @@ class UIManager:
             self._reminder_seconds(), self._show_rest_reminder
         )
 
+        # AI 主动互动：每隔一段时间让宠物结合状态/记忆/时段主动冒泡说一句。
+        # LLM 请求在后台线程进行，结果经队列回主循环显示；离线则用状态化文案降级。
+        self._proactive_timer = IntervalTimer(
+            settings.PROACTIVE_CHAT_INTERVAL_MINUTES * 60.0, self._trigger_proactive
+        )
+        self._proactive_queue: "queue.Queue[str]" = queue.Queue()
+        self._proactive_pending = False
+
         # 交互引起的属性变化（属性名 -> [变化量, 剩余显示时间]）
         self._attr_deltas: dict = {}
 
@@ -490,8 +498,10 @@ class UIManager:
         """处理后台线程结果回传，推进属性变化提示与创建窗口的实时预览。"""
         self._process_ai_replies()
         self._process_ai_test_results()
+        self._process_proactive()
         self._update_attr_deltas(dt)
         self._update_rest_reminder(dt)
+        self._proactive_timer.update(dt)
         self.speech_bubble.update(dt)
         if self.skin_creator.visible:
             self.skin_creator.update(dt)
@@ -510,6 +520,41 @@ class UIManager:
             random.choice(settings.REST_REMINDER_MESSAGES),
             settings.REST_REMINDER_BUBBLE_DURATION,
         )
+
+    def _trigger_proactive(self) -> None:
+        """到点尝试让宠物主动说一句：满足条件时后台请求，否则跳过本次。
+
+        跳过条件：已有请求在途、聊天/设置等窗口打开、当前已有气泡显示、
+        宠物已隐藏到托盘、或宠物正在睡觉（让它安静睡）。
+        """
+        if (
+            self._proactive_pending
+            or self.blocks_autonomous
+            or self.speech_bubble.visible
+            or not self.desktop_manager.visible
+            or self.pet.current_animation == "sleep"
+        ):
+            return
+
+        self._proactive_pending = True
+
+        def worker() -> None:
+            try:
+                text = self.ai_service.proactive_message(self.pet)
+            except Exception as exc:
+                log_exception(AIServiceError(f"主动互动生成异常: {exc}"))
+                text = ""
+            self._proactive_queue.put(text)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _process_proactive(self) -> None:
+        """把后台生成的主动发言显示为头顶气泡（若期间没被其它气泡占用）。"""
+        while not self._proactive_queue.empty():
+            text = self._proactive_queue.get_nowait()
+            self._proactive_pending = False
+            if text and not self.speech_bubble.visible:
+                self.speech_bubble.show(text, settings.PROACTIVE_BUBBLE_DURATION)
 
     def _process_ai_replies(self) -> None:
         """将后台线程中 AIService.chat() 返回的回复写回对话窗口。"""

@@ -28,6 +28,20 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
+- **正在进行**：无（D、C 已完成，等待提交/下一步指令）。
+- **最近一次完成**（未提交）：**C AI 主动互动**：宠物每隔 `PROACTIVE_CHAT_INTERVAL_MINUTES`(默认10分钟)
+  结合状态/记忆/时段主动在头顶气泡说一句。`PromptManager.proactive_messages` + `AIService.proactive_message`
+  （后台线程调用，LLM 不可用按当前动画状态从 `settings.PROACTIVE_OFFLINE_MESSAGES` 离线降级，不写对话记忆）；
+  `UIManager` 加 `_proactive_timer`/队列/`_trigger_proactive`（睡觉/聊天窗口开/已有气泡/隐藏到托盘时跳过）/
+  `_process_proactive`，复用 `speech_bubble`。`tests/test_ai_service.py` 加 5 个用例（LLM/离线/违规降级/时段）（144→149）。
+  实机冒烟：timer→线程→队列→气泡链路通、睡觉跳过正常。（TTS 朗读列为可选未做。）
+- **最近一次完成**（未提交）：**D 多屏 + DPI 健壮性**：①`core/desktop.py` 新增 `enable_dpi_awareness()`
+  （Per-Monitor v2，main.py 在建 Game 前最先调用）使 pygame 像素与 Win32 坐标统一，修缩放/混合 DPI 错位；
+  ②`get_virtual_screen()` 返回虚拟桌面 (x,y,w,h)（多屏并集，可含负原点）；③`MovementController.set_bounds`
+  加 `origin` 参数（默认 (0,0) 不变），`pick_random_target` 以 origin 为基准，支持跨屏/负坐标漫游；
+  ④`Game` 的初始漫游边界、`_enter_fullscreen_overlay`（取点遮罩铺满整个虚拟桌面）、`_enter_fence_mode`、
+  `_enter_follow_mode` 全改用虚拟桌面 + origin，围栏可落在任意屏。`tests/test_movement.py` 加 origin/副屏围栏用例（142→144）。
+  实机冒烟：进程 DPI awareness=per-monitor、虚拟桌面尺寸正确、follow/fence 边界与 origin 正确、围栏取点正常。
 - **最近一次完成**（`23f1b59`，已 push；并发布 **GitHub Release v1.0.0** 带 `VirtualPet.exe` 资产）：
   **B 打包分发（PyInstaller onefile）**：`config/settings.py` 拆 `RESOURCE_DIR`(_MEIPASS)
   与 `APP_DIR`(exe 旁)——只读资源（assets/动画/图片/声音、behavior/desktop/moderation 配置、ai_config 模板）走
@@ -93,11 +107,9 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
   - **A. 美术升级**：接入正式素材 / GIF·APNG·Lottie 动画，替换占位帧（视觉是桌宠灵魂，最大短板；需素材）。
-  - **C. AI 主动互动**：宠物基于状态/记忆/时间主动冒泡说话（非被动等聊天），体验跃升；可选 TTS 朗读。
-  - **D. 健壮性**：多显示器 + DPI 缩放兼容（当前 `get_screen_size` 只取主屏、未设 DPI 感知，
-    围栏窗口化在多屏/非 100% 缩放机器上可能有坑，是新引入的技术债）。
-  - 注：「B 打包分发」已完成（见上）；「工程向单测」「计时器聚合」「皮肤切换图形化」已完成；
-    「拖放道具」已被否决，均不再列为候选。
+  - **C 余项（可选）**：AI 主动互动的 TTS 朗读、设置窗口加「主动互动开关/间隔」UI。
+  - 注：「B 打包分发」「D 多屏/DPI 健壮性」「C AI 主动互动（核心）」已完成（见上）；「工程向单测」
+    「计时器聚合」「皮肤切换图形化」已完成；「拖放道具」已被否决，均不再列为候选。
 
 ---
 

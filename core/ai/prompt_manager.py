@@ -99,6 +99,28 @@ class PromptManager:
             {"role": "user", "content": convo},
         ]
 
+    def proactive_messages(self, pet, time_hint: str) -> List[Dict[str, str]]:
+        """拼接「宠物主动说话」的消息：System + Pet State + Memory + 主动发言指令。
+
+        time_hint 为时段提示（如"晚上"）。要求 LLM 结合状态与记忆，主动对主人
+        说一句自然、简短、有情绪的话（用于头顶气泡），不针对任何用户输入。
+        """
+        context = "\n".join([
+            self.pet_state_prompt(pet),
+            "历史记忆：",
+            self.memory.describe(),
+        ])
+        instruction = (
+            f"现在是{time_hint}。请你作为宠物，结合自己当前的状态和对主人的记忆，"
+            "主动对主人说一句自然、简短（不超过 20 字）、有情绪的话，"
+            "就像突然想跟主人搭话一样。只输出这一句话本身，不要加引号或解释。"
+        )
+        return [
+            {"role": "system", "content": self.system_prompt()},
+            {"role": "system", "content": context},
+            {"role": "user", "content": instruction},
+        ]
+
     def build_messages(self, pet, user_message: str) -> List[Dict[str, str]]:
         """拼接 System Prompt + Pet State + Memory + User Message，生成消息列表。"""
         context = "\n".join([

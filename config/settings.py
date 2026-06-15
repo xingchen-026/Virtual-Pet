@@ -297,6 +297,23 @@ FOOD_ICON_RADIUS = 14
 FOOD_MAX_COUNT = 10
 
 
+# ----- AI 主动互动（宠物基于状态/记忆/时间主动冒泡说话）-----
+# 每隔多少分钟尝试主动说一句（满足条件时后台请求 LLM；不满足则跳过）
+PROACTIVE_CHAT_INTERVAL_MINUTES = 10
+# 主动气泡显示时长（秒）
+PROACTIVE_BUBBLE_DURATION = 6.0
+# AI 不可用（无 Key / 离线）时，按宠物当前动画状态随机选一句，保证离线也能主动互动。
+# 键对应 current_animation；未命中用 default。
+PROACTIVE_OFFLINE_MESSAGES = {
+    "hungry": ["肚子有点饿了呢，有好吃的吗~", "闻到食物的味道了…我饿啦！"],
+    "tired": ["有点困了…想打个盹儿。", "今天好累呀，陪我歇会儿好不好~"],
+    "sad": ["有点小情绪…抱抱我嘛。", "感觉闷闷的，陪陪我好吗？"],
+    "happy": ["今天心情超好哒！", "和你在一起好开心呀~"],
+    "excited": ["好有精神呀，一起玩嘛！", "嘿嘿，今天超有活力！"],
+    "default": ["在忙什么呢？我在看着你哦~", "要不要摸摸我呀？", "今天也要元气满满哦！"],
+}
+
+
 def ensure_user_data() -> None:
     """打包(onefile)首次运行时，把可写数据从只读资源播种到 exe 旁目录。
 

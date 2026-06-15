@@ -37,6 +37,10 @@ class MovementController:
         # 使宠物不会漫游到屏幕边缘导致窗口（及右键面板）跑出屏幕外。
         self.inset: Tuple[int, int] = (0, 0)
 
+        # 漫游范围的原点（左上角，与 bounds 同坐标系）。多显示器虚拟桌面下
+        # 主屏左侧/上方的显示器坐标为负，故原点可能非 (0,0)。默认 (0,0) 即单屏。
+        self.origin: Tuple[int, int] = (0, 0)
+
         # 电子围栏：(x1, y1, x2, y2)，与 bounds 同坐标系。设定后随机漫游
         # 目标被限制在围栏与安全区间的交集内（见 pick_random_target）。
         self.fence: Optional[Tuple[int, int, int, int]] = None
@@ -55,10 +59,20 @@ class MovementController:
         self.target = None
         self._float_position = None
 
-    def set_bounds(self, width: int, height: int, inset: Tuple[int, int] = (0, 0)) -> None:
-        """设置漫游范围与边缘内缩（桌面窗口跟随模式下为屏幕大小 + 半窗口内缩）。"""
+    def set_bounds(
+        self,
+        width: int,
+        height: int,
+        inset: Tuple[int, int] = (0, 0),
+        origin: Tuple[int, int] = (0, 0),
+    ) -> None:
+        """设置漫游范围、边缘内缩与原点（桌面跟随模式为虚拟桌面尺寸 + 半窗口内缩）。
+
+        origin 为漫游范围左上角，多显示器虚拟桌面下可能为负；默认 (0,0) 即单屏。
+        """
         self.bounds = (width, height)
         self.inset = inset
+        self.origin = origin
 
     def set_fence(self, fence: Tuple[int, int, int, int]) -> None:
         """设置电子围栏，限定随机漫游范围（坐标系与 bounds 一致）。"""
@@ -87,10 +101,10 @@ class MovementController:
         （围栏过小或贴屏幕边时 _random_in_range 返回区间中点，仍落在围栏内）。
         """
         margin = self.config["movement_margin"]
-        low_x = self.inset[0] + margin
-        high_x = self.bounds[0] - self.inset[0] - margin
-        low_y = self.inset[1] + margin
-        high_y = self.bounds[1] - self.inset[1] - margin
+        low_x = self.origin[0] + self.inset[0] + margin
+        high_x = self.origin[0] + self.bounds[0] - self.inset[0] - margin
+        low_y = self.origin[1] + self.inset[1] + margin
+        high_y = self.origin[1] + self.bounds[1] - self.inset[1] - margin
 
         if self.fence is not None:
             fx1, fy1, fx2, fy2 = self.fence
