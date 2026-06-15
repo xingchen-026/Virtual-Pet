@@ -28,7 +28,8 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**（未提交）：**B 打包分发（PyInstaller onefile）**：`config/settings.py` 拆 `RESOURCE_DIR`(_MEIPASS)
+- **最近一次完成**（`23f1b59`，已 push；并发布 **GitHub Release v1.0.0** 带 `VirtualPet.exe` 资产）：
+  **B 打包分发（PyInstaller onefile）**：`config/settings.py` 拆 `RESOURCE_DIR`(_MEIPASS)
   与 `APP_DIR`(exe 旁)——只读资源（assets/动画/图片/声音、behavior/desktop/moderation 配置、ai_config 模板）走
   RESOURCE，可写数据（data/、logs/、user_config/skin_config、用户皮肤 `SKINS_DIR`）走 APP；新增 `ensure_user_data()`
   首运行播种（内置皮肤 copytree + ai_config 从 `config/ai_config.template.json` 拷贝，**绝不打包真实 Key**），`main.py`
@@ -37,7 +38,8 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
   build/ 以免被 --clean 清掉）；`utils/spritesheet.py` 的 scipy 改 try/except 缺失降级。`.gitignore` 加
   build/ dist/ *.spec packaging/ .build_venv/。**实机冒烟通过**：干净 venv 打出 **38MB** exe（全局脏环境曾打出 2.6GB），
   在空目录运行自动播种（ai_config 空 Key 已核 + 内置皮肤 cat + data/logs）、宠物正常漫游、无 error.log。
-  开发态路径与原先完全一致，142 测试仍绿。**待办：提交 + push。**
+  开发态路径与原先完全一致，142 测试仍绿。源码已提交 push、exe 不入库仅随 Release 分发
+  （`gh release create v1.0.0 dist/VirtualPet.exe`；本机 gh 在 `C:\Program Files\GitHub CLI\gh.exe`，已登录 xingchen-026）。
 - **最近一次完成**（`1e89d8b`，已 push）：**围栏窗口化 + 鼠标取点 + 食物上限**（在下方「电子围栏」基础上迭代）：
   ①食物上限——`settings.FOOD_MAX_COUNT=10`；`FeedingController.add(point, max_count)` 返回 bool、新增 `is_full`；
   `Game._handle_feed_placement` 到顶忽略并气泡「先吃完这些」。
