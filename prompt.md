@@ -28,8 +28,10 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：**美术升级路线**——#2/#3/#4/#5 **全部完成**，下一步 **发布 v1.1.0**（干净 venv 重打 exe，
-  需含 pyttsx3；`gh release create v1.1.0 dist/VirtualPet.exe`）。
+- **正在进行**：无（美术升级路线 #2–#5 全部完成，并已发布 **GitHub Release v1.1.0**）。
+- **最近一次完成**（`4120d31`，已 push；发布 **Release v1.1.0** 带 `VirtualPet.exe` 37.6MB）：**发布 v1.1.0**——
+  干净 venv（含 pyttsx3）重打 onefile exe（38MB），`build_exe.py` 加 pyttsx3/comtypes/sapi5 隐藏导入；
+  空目录冒烟：自动播种、ai_config 空 Key、无 error.log、TTS 驱动已打入（warn 文件无 sapi5 缺失）。
 - **最近一次完成**（未提交）：**#5 成长/等级养成系统**：`Pet` 加 `level`/`exp` + `exp_to_next()`（阈值=
   `LEVEL_BASE_EXP*等级`）+ `add_exp()`（结算多级、满级清零）+ 序列化；`Game._dispatch_interaction` 正向互动按
   `settings.EXP_REWARDS` 给经验，升级触发庆祝（excited 动画 + levelup 音效 + 气泡）；数值面板加「等级」行
