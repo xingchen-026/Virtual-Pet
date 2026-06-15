@@ -28,8 +28,14 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：无（D、C 已完成，等待提交/下一步指令）。
-- **最近一次完成**（未提交）：**C AI 主动互动**：宠物每隔 `PROACTIVE_CHAT_INTERVAL_MINUTES`(默认10分钟)
+- **正在进行**：无（等待提交/下一步指令）。
+- **最近一次完成**（未提交）：**设置窗口加主动互动开关/间隔**：`SettingsWindow` 新增「主动互动」开关行
+  （`_draw_toggle_row` 开/关）与「互动间隔」步进行（`_draw_stepper_row`，范围 `PROACTIVE_INTERVAL_MIN/MAX/STEP`），
+  `open()`/`_result()` 带上 `proactive_enabled`/`proactive_interval`；`UIManager` 接收并在 `_apply_save` 更新、重置
+  `_proactive_timer`，`_trigger_proactive` 先判 `proactive_enabled`；`Game` 从/向 `user_config` 读写
+  `proactive_enabled`/`proactive_interval_minutes`。`theme.ACCENT_COLOR`（开态高亮）；`SETTINGS_WINDOW_HEIGHT` 520→588。
+  实机冒烟：开关翻转、间隔步进、save 回传新字段均正确。（无新增单测——设置窗口需 pygame video，沿用既有不测 UI 渲染惯例。）
+- **更早一次完成**（未提交）：**C AI 主动互动**：宠物每隔 `PROACTIVE_CHAT_INTERVAL_MINUTES`(默认10分钟)
   结合状态/记忆/时段主动在头顶气泡说一句。`PromptManager.proactive_messages` + `AIService.proactive_message`
   （后台线程调用，LLM 不可用按当前动画状态从 `settings.PROACTIVE_OFFLINE_MESSAGES` 离线降级，不写对话记忆）；
   `UIManager` 加 `_proactive_timer`/队列/`_trigger_proactive`（睡觉/聊天窗口开/已有气泡/隐藏到托盘时跳过）/
@@ -107,7 +113,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
   - **A. 美术升级**：接入正式素材 / GIF·APNG·Lottie 动画，替换占位帧（视觉是桌宠灵魂，最大短板；需素材）。
-  - **C 余项（可选）**：AI 主动互动的 TTS 朗读、设置窗口加「主动互动开关/间隔」UI。
+  - **C 余项（可选）**：AI 主动互动的 TTS 朗读（设置窗口「开关/间隔」UI 已完成）。
   - 注：「B 打包分发」「D 多屏/DPI 健壮性」「C AI 主动互动（核心）」已完成（见上）；「工程向单测」
     「计时器聚合」「皮肤切换图形化」已完成；「拖放道具」已被否决，均不再列为候选。
 
@@ -123,7 +129,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 5. **API Key 绝不入库**：仓库版 `config/ai_config.json` 的 `api_key` 必须为空。
    本地真实 Key 已用 `git update-index --skip-worktree config/ai_config.json` 屏蔽，
    `config/ai_config.json.local` 在 `.gitignore` 中。提交前务必确认 `git show HEAD:config/ai_config.json` 不含 Key。
-6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 142 passed）。
+6. **提交前跑测试**：`python -m pytest tests/ -q` 应全绿（当前 149 passed）。
 7. **提交规范**：commit message 用中文，描述「做了什么 + 为什么」；结尾加 `Co-Authored-By` 行。
    只在用户要求时 commit/push。`git push` 时 `credential-manager-core` 警告可忽略（推送已成功）。
 8. **验证习惯**：改动后跑 pytest + 临时脚本冒烟（用完即删，命名 `tools/_xxx_test.py`），
@@ -257,7 +263,7 @@ AI 聊天：UIManager -> 后台线程 AIService.chat -> 队列回传 -> 写回�
 ```bash
 pip install -r requirements.txt      # pygame/pywin32/pystray/Pillow（皮肤工具另需 numpy/scipy）
 python main.py                        # 启动桌宠
-python -m pytest tests/ -q            # 回归测试（当前 142 passed）
+python -m pytest tests/ -q            # 回归测试（当前 149 passed）
 
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk

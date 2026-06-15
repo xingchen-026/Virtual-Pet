@@ -234,7 +234,7 @@ CHAT_WINDOW_HEIGHT = 420
 
 # 设置窗口尺寸（靠右侧停靠，垂直居中）。高度容纳「保存并退出」按钮行
 SETTINGS_WINDOW_WIDTH = 280
-SETTINGS_WINDOW_HEIGHT = 520
+SETTINGS_WINDOW_HEIGHT = 588
 
 # 皮肤选择窗口尺寸（靠右侧停靠，垂直居中；缩略图预览选择 + 缺失状态提示）
 SKIN_WINDOW_WIDTH = 300
@@ -298,8 +298,14 @@ FOOD_MAX_COUNT = 10
 
 
 # ----- AI 主动互动（宠物基于状态/记忆/时间主动冒泡说话）-----
+# 是否默认开启主动互动（可在设置窗口开关，存 user_config.proactive_enabled）
+PROACTIVE_CHAT_ENABLED = True
 # 每隔多少分钟尝试主动说一句（满足条件时后台请求 LLM；不满足则跳过）
 PROACTIVE_CHAT_INTERVAL_MINUTES = 10
+# 设置窗口里主动互动间隔的调节范围与步长（分钟）
+PROACTIVE_INTERVAL_MIN = 2
+PROACTIVE_INTERVAL_MAX = 60
+PROACTIVE_INTERVAL_STEP = 2
 # 主动气泡显示时长（秒）
 PROACTIVE_BUBBLE_DURATION = 6.0
 # AI 不可用（无 Key / 离线）时，按宠物当前动画状态随机选一句，保证离线也能主动互动。

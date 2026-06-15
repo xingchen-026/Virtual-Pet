@@ -45,6 +45,8 @@ class SettingsWindow:
         self.tone = ""
         self.pet_scale = settings.PET_SCALE_DEFAULT
         self.reminder_interval = settings.REST_REMINDER_INTERVAL_MINUTES
+        self.proactive_enabled = settings.PROACTIVE_CHAT_ENABLED
+        self.proactive_interval = settings.PROACTIVE_CHAT_INTERVAL_MINUTES
         self.provider = PROVIDERS[0]
         self.base_url = ""
         self.model = ""
@@ -65,6 +67,8 @@ class SettingsWindow:
     def open(
         self, pet_scale: float, name: str, character: str, tone: str, ai_config: dict,
         reminder_interval: float = settings.REST_REMINDER_INTERVAL_MINUTES,
+        proactive_enabled: bool = settings.PROACTIVE_CHAT_ENABLED,
+        proactive_interval: float = settings.PROACTIVE_CHAT_INTERVAL_MINUTES,
     ) -> None:
         """打开设置窗口，并以当前配置初始化各编辑项。"""
         self.visible = True
@@ -73,6 +77,8 @@ class SettingsWindow:
         self.tone = tone
         self.pet_scale = pet_scale
         self.reminder_interval = reminder_interval
+        self.proactive_enabled = proactive_enabled
+        self.proactive_interval = proactive_interval
         self.provider = ai_config.get("provider", PROVIDERS[0])
         if self.provider not in PROVIDERS:
             PROVIDERS.append(self.provider)
@@ -156,6 +162,18 @@ class SettingsWindow:
                     settings.REMINDER_INTERVAL_MAX,
                     self.reminder_interval + settings.REMINDER_INTERVAL_STEP,
                 )
+            elif name == "proactive_toggle":
+                self.proactive_enabled = not self.proactive_enabled
+            elif name == "proactive_minus":
+                self.proactive_interval = max(
+                    settings.PROACTIVE_INTERVAL_MIN,
+                    self.proactive_interval - settings.PROACTIVE_INTERVAL_STEP,
+                )
+            elif name == "proactive_plus":
+                self.proactive_interval = min(
+                    settings.PROACTIVE_INTERVAL_MAX,
+                    self.proactive_interval + settings.PROACTIVE_INTERVAL_STEP,
+                )
             elif name == "provider":
                 self._provider_open = not self._provider_open
             elif name in ("name", "character", "tone", "base_url", "model", "api_key"):
@@ -235,6 +253,8 @@ class SettingsWindow:
             "tone": self.tone.strip(),
             "pet_scale": self.pet_scale,
             "reminder_interval": self.reminder_interval,
+            "proactive_enabled": self.proactive_enabled,
+            "proactive_interval": self.proactive_interval,
             "ai_config": self._collect_ai_config(),
         }
 
@@ -266,6 +286,13 @@ class SettingsWindow:
         y = self._draw_field_row(panel, y, "语气", "tone", self.tone)
         y = self._draw_scale_row(panel, y)
         y = self._draw_reminder_row(panel, y)
+        y = self._draw_toggle_row(
+            panel, y, "主动互动", self.proactive_enabled, "proactive_toggle"
+        )
+        y = self._draw_stepper_row(
+            panel, y, "互动间隔", f"{self.proactive_interval:g}分",
+            "proactive_minus", "proactive_plus",
+        )
         provider_rect, y = self._draw_provider_row(panel, y)
         y = self._draw_field_row(panel, y, "接口地址", "base_url", self.base_url or "（默认）")
         y = self._draw_field_row(panel, y, "模型", "model", self.model)
@@ -332,6 +359,49 @@ class SettingsWindow:
         value = self.font.render(f"{self.reminder_interval:g}分", True, theme.TEXT_COLOR)
         panel.blit(value, value.get_rect(center=value_rect.center))
 
+        return y + ROW_HEIGHT
+
+    def _draw_stepper_row(
+        self, panel: pygame.Surface, y: int, label_text: str, value_text: str,
+        minus_name: str, plus_name: str,
+    ) -> int:
+        """通用「标签 + [-] 数值 [+]」步进行（与提醒/大小行同款布局）。"""
+        label = self.font.render(label_text, True, theme.LABEL_COLOR)
+        panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
+
+        value_x = self.rect.width // 2
+        minus_rect = pygame.Rect(value_x, y, FIELD_HEIGHT, FIELD_HEIGHT)
+        value_rect = pygame.Rect(minus_rect.right + 6, y, 56, FIELD_HEIGHT)
+        plus_rect = pygame.Rect(value_rect.right + 6, y, FIELD_HEIGHT, FIELD_HEIGHT)
+
+        for name, rect, text in (
+            (minus_name, minus_rect, "-"),
+            (plus_name, plus_rect, "+"),
+        ):
+            pygame.draw.rect(panel, theme.BUTTON_BG_COLOR, rect, border_radius=4)
+            pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
+            glyph = self.font.render(text, True, theme.BUTTON_TEXT_COLOR)
+            panel.blit(glyph, glyph.get_rect(center=rect.center))
+            self._hit_areas[name] = rect
+
+        value = self.font.render(value_text, True, theme.TEXT_COLOR)
+        panel.blit(value, value.get_rect(center=value_rect.center))
+        return y + ROW_HEIGHT
+
+    def _draw_toggle_row(
+        self, panel: pygame.Surface, y: int, label_text: str, on: bool, toggle_name: str,
+    ) -> int:
+        """通用「标签 + [开/关] 切换」行；开为高亮、关为灰底。"""
+        label = self.font.render(label_text, True, theme.LABEL_COLOR)
+        panel.blit(label, (PADDING, y + (ROW_HEIGHT - label.get_height()) // 2))
+
+        rect = pygame.Rect(self.rect.width // 2, y, 56, FIELD_HEIGHT)
+        bg = theme.ACCENT_COLOR if on else theme.BUTTON_BG_COLOR
+        pygame.draw.rect(panel, bg, rect, border_radius=4)
+        pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=4)
+        text = self.font.render("开" if on else "关", True, theme.BUTTON_TEXT_COLOR)
+        panel.blit(text, text.get_rect(center=rect.center))
+        self._hit_areas[toggle_name] = rect
         return y + ROW_HEIGHT
 
     def _draw_provider_row(self, panel: pygame.Surface, y: int):

@@ -214,6 +214,12 @@ class Game:
             reminder_interval_minutes=self.user_config.get(
                 "reminder_interval_minutes", settings.REST_REMINDER_INTERVAL_MINUTES
             ),
+            proactive_enabled=self.user_config.get(
+                "proactive_enabled", settings.PROACTIVE_CHAT_ENABLED
+            ),
+            proactive_interval_minutes=self.user_config.get(
+                "proactive_interval_minutes", settings.PROACTIVE_CHAT_INTERVAL_MINUTES
+            ),
             on_feed_place_start=self._start_feed_placement,
             on_fence_toggle=self._toggle_fence,
             on_fence_view_toggle=self._toggle_fence_view,
@@ -688,6 +694,8 @@ class Game:
         """
         self.user_config["pet_scale"] = self.pet_sprite.scale
         self.user_config["reminder_interval_minutes"] = self.ui.reminder_interval_minutes
+        self.user_config["proactive_enabled"] = self.ui.proactive_enabled
+        self.user_config["proactive_interval_minutes"] = self.ui.proactive_interval_minutes
         fence = self.fence_controller.fence
         self.user_config["fence"] = list(fence) if fence else None
         self.user_config["fence_visible"] = self._fence_visible

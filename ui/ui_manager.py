@@ -83,6 +83,8 @@ class UIManager:
         on_skin_change: Callable[[str], None] = None,
         on_skin_create: Callable[[dict], tuple] = None,
         reminder_interval_minutes: float = settings.REST_REMINDER_INTERVAL_MINUTES,
+        proactive_enabled: bool = settings.PROACTIVE_CHAT_ENABLED,
+        proactive_interval_minutes: float = settings.PROACTIVE_CHAT_INTERVAL_MINUTES,
         on_feed_place_start: Callable[[], None] = None,
         on_fence_toggle: Callable[[], None] = None,
         on_fence_view_toggle: Callable[[], None] = None,
@@ -121,9 +123,12 @@ class UIManager:
         )
 
         # AI 主动互动：每隔一段时间让宠物结合状态/记忆/时段主动冒泡说一句。
-        # LLM 请求在后台线程进行，结果经队列回主循环显示；离线则用状态化文案降级。
+        # 开关与间隔可在设置窗口调整（存 user_config）。LLM 请求在后台线程进行，
+        # 结果经队列回主循环显示；离线则用状态化文案降级。
+        self.proactive_enabled = proactive_enabled
+        self.proactive_interval_minutes = proactive_interval_minutes
         self._proactive_timer = IntervalTimer(
-            settings.PROACTIVE_CHAT_INTERVAL_MINUTES * 60.0, self._trigger_proactive
+            self._proactive_seconds(), self._trigger_proactive
         )
         self._proactive_queue: "queue.Queue[str]" = queue.Queue()
         self._proactive_pending = False
@@ -352,6 +357,8 @@ class UIManager:
                 self.pet_sprite.scale, personality.name,
                 personality.character, personality.tone, self.ai_config,
                 reminder_interval=self.reminder_interval_minutes,
+                proactive_enabled=self.proactive_enabled,
+                proactive_interval=self.proactive_interval_minutes,
             )
             self.stats_panel.hide()
             self.desktop_manager.focus()
@@ -444,7 +451,12 @@ class UIManager:
         # 间隔变更后按新间隔重新计时
         self._rest_timer.interval = self._reminder_seconds()
         self._rest_timer.reset()
-        self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒间隔）
+        # 主动互动开关 / 间隔
+        self.proactive_enabled = result["proactive_enabled"]
+        self.proactive_interval_minutes = result["proactive_interval"]
+        self._proactive_timer.interval = self._proactive_seconds()
+        self._proactive_timer.reset()
+        self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒/主动互动）
 
         # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格
         personality = self.ai_service.personality
@@ -510,6 +522,10 @@ class UIManager:
         """当前提醒间隔（秒），下限 1 秒避免间隔为 0 时每帧触发。"""
         return max(1.0, self.reminder_interval_minutes * 60.0)
 
+    def _proactive_seconds(self) -> float:
+        """当前主动互动间隔（秒），下限 1 秒避免间隔为 0 时每帧触发。"""
+        return max(1.0, self.proactive_interval_minutes * 60.0)
+
     def _update_rest_reminder(self, dt: float) -> None:
         """累计计时，到达提醒间隔时弹出休息提醒气泡（由计时器回调触发）。"""
         self._rest_timer.update(dt)
@@ -528,7 +544,8 @@ class UIManager:
         宠物已隐藏到托盘、或宠物正在睡觉（让它安静睡）。
         """
         if (
-            self._proactive_pending
+            not self.proactive_enabled
+            or self._proactive_pending
             or self.blocks_autonomous
             or self.speech_bubble.visible
             or not self.desktop_manager.visible
