@@ -28,8 +28,13 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：**美术升级路线（按 2→3→4→5 顺序，全完成后发 v1.1.0）**。已完成 #2/#3/#4，进行 #5。
-- **最近一次完成**（未提交）：**#4 TTS 语音朗读**：`core/tts.py` 的 `TTSManager`（可选 pyttsx3，离线 SAPI5；
+- **正在进行**：**美术升级路线**——#2/#3/#4/#5 **全部完成**，下一步 **发布 v1.1.0**（干净 venv 重打 exe，
+  需含 pyttsx3；`gh release create v1.1.0 dist/VirtualPet.exe`）。
+- **最近一次完成**（未提交）：**#5 成长/等级养成系统**：`Pet` 加 `level`/`exp` + `exp_to_next()`（阈值=
+  `LEVEL_BASE_EXP*等级`）+ `add_exp()`（结算多级、满级清零）+ 序列化；`Game._dispatch_interaction` 正向互动按
+  `settings.EXP_REWARDS` 给经验，升级触发庆祝（excited 动画 + levelup 音效 + 气泡）；数值面板加「等级」行
+  （`UIManager._stats_lines`）。`tests/test_pet.py` +5（160→165）。实机冒烟：9 次喂食升到 Lv.2（余 8 exp）、面板显示、持久化正确。
+- **更早一次完成**（未提交）：**#4 TTS 语音朗读**：`core/tts.py` 的 `TTSManager`（可选 pyttsx3，离线 SAPI5；
   单后台线程串行朗读 + 队列积压丢弃 + 缺库/初始化失败优雅降级）；`Game` 创建 `self.tts` 传入 `UIManager`，
   在主动发言（`_process_proactive`）与聊天回复（`_process_ai_replies`）处 `speak`；设置窗口加「语音朗读」开关
   （默认关，持久化 `user_config.tts_enabled`，`_save_user_config` 即时 `set_enabled`）。`requirements.txt` 加 pyttsx3，

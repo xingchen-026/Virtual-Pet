@@ -463,6 +463,15 @@ class Game:
         self.ui.record_attr_deltas(before)
         self.sound.play(INTERACTION_SOUNDS.get(interaction_event.type))
 
+        # 成长系统：正向互动积累经验，升级时庆祝（升级动画 + 音效 + 气泡）
+        gained = settings.EXP_REWARDS.get(interaction_event.type.value, 0)
+        if gained and self.pet.add_exp(gained) > 0:
+            self.behavior.trigger_temporary_animation(
+                "excited", settings.LEVELUP_ANIMATION_DURATION
+            )
+            self.sound.play("levelup")
+            self.ui.show_bubble(f"升级啦！现在是 Lv.{self.pet.level} 🎉")
+
         log_message = INTERACTION_LOG_MESSAGES.get(interaction_event.type)
         if log_message is not None:
             self.behavior_logger.log(log_message)

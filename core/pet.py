@@ -61,6 +61,11 @@ class Pet:
         # 累计交互次数，由 BehaviorManager 在每次执行行为后更新
         self.interaction_count = 0
 
+        # 成长系统：等级与当前等级内的经验值。正向养成动作积累经验，满则升级
+        # （升级阈值随等级增长，见 exp_to_next / add_exp）。由 Game 在交互后调用。
+        self.level = 1
+        self.exp = 0
+
     # ----- 属性修改接口（绝对赋值，自动限制范围） -----
     def set_name(self, name: str) -> None:
         self.name = name
@@ -99,6 +104,27 @@ class Pet:
     def decrease_energy(self, amount: float = 1) -> None:
         self.set_energy(self.energy - amount)
 
+    def exp_to_next(self) -> int:
+        """升到下一级所需的经验值（随等级线性增长）。"""
+        return settings.LEVEL_BASE_EXP * self.level
+
+    def add_exp(self, amount: float) -> int:
+        """累加经验并结算升级，返回本次升了几级（0 表示未升级）。
+
+        到达 LEVEL_MAX 后不再升级、经验清零。amount<=0 或已满级直接返回 0。
+        """
+        if amount <= 0 or self.level >= settings.LEVEL_MAX:
+            return 0
+        self.exp += amount
+        levels = 0
+        while self.level < settings.LEVEL_MAX and self.exp >= self.exp_to_next():
+            self.exp -= self.exp_to_next()
+            self.level += 1
+            levels += 1
+        if self.level >= settings.LEVEL_MAX:
+            self.exp = 0
+        return levels
+
     def record_interaction(self, action_name: str) -> None:
         """记录一次交互行为：更新最近行为名称并累加交互次数。"""
         self.last_action = action_name
@@ -134,6 +160,8 @@ class Pet:
             "state": self.current_state.name,
             "last_action": self.last_action,
             "interaction_count": self.interaction_count,
+            "level": self.level,
+            "exp": self.exp,
         }
 
     @classmethod
@@ -149,6 +177,8 @@ class Pet:
         pet.current_state = PetState[data.get("state", PetState.IDLE.name)]
         pet.last_action = data.get("last_action")
         pet.interaction_count = data.get("interaction_count", 0)
+        pet.level = max(1, int(data.get("level", 1)))
+        pet.exp = max(0, data.get("exp", 0))
         return pet
 
     def __repr__(self) -> str:

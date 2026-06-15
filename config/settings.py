@@ -306,6 +306,21 @@ SOUND_VOLUME = 0.45
 # 依赖可选库 pyttsx3，未安装则即便开启也自动静默降级。
 TTS_ENABLED = False
 
+# ----- 成长 / 等级养成 -----
+LEVEL_MAX = 99                      # 等级上限
+LEVEL_BASE_EXP = 100               # 升到下一级所需经验 = LEVEL_BASE_EXP * 当前等级
+# 各养成/互动动作给予的经验值（键为 InteractionEventType 的值）
+EXP_REWARDS = {
+    "feed": 12,
+    "play": 15,
+    "bath": 10,
+    "gift": 25,
+    "click": 2,
+    "excited": 5,
+}
+# 升级时播放的庆祝动画（excited）持续时长（秒）
+LEVELUP_ANIMATION_DURATION = 1.6
+
 
 # ----- AI 主动互动（宠物基于状态/记忆/时间主动冒泡说话）-----
 # 是否默认开启主动互动（可在设置窗口开关，存 user_config.proactive_enabled）
