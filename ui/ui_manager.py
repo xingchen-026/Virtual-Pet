@@ -86,6 +86,8 @@ class UIManager:
         proactive_enabled: bool = settings.PROACTIVE_CHAT_ENABLED,
         proactive_interval_minutes: float = settings.PROACTIVE_CHAT_INTERVAL_MINUTES,
         sound_enabled: bool = settings.SOUND_ENABLED,
+        tts=None,
+        tts_enabled: bool = settings.TTS_ENABLED,
         on_feed_place_start: Callable[[], None] = None,
         on_fence_toggle: Callable[[], None] = None,
         on_fence_view_toggle: Callable[[], None] = None,
@@ -131,6 +133,10 @@ class UIManager:
         # 音效开关（实际播放在 Game 的 SoundManager；此处仅承载设置窗口的编辑值，
         # 保存后经 on_user_prefs_changed 让 Game 应用并持久化）
         self.sound_enabled = sound_enabled
+        # 语音朗读：tts 为 Game 创建的 TTSManager（可能为 None，如测试），在主动发言/
+        # 聊天回复处调用 speak；tts_enabled 为设置窗口编辑值，保存后由 Game 应用并持久化
+        self._tts = tts
+        self.tts_enabled = tts_enabled
         self._proactive_timer = IntervalTimer(
             self._proactive_seconds(), self._trigger_proactive
         )
@@ -364,6 +370,7 @@ class UIManager:
                 proactive_enabled=self.proactive_enabled,
                 proactive_interval=self.proactive_interval_minutes,
                 sound_enabled=self.sound_enabled,
+                tts_enabled=self.tts_enabled,
             )
             self.stats_panel.hide()
             self.desktop_manager.focus()
@@ -461,8 +468,9 @@ class UIManager:
         self.proactive_interval_minutes = result["proactive_interval"]
         self._proactive_timer.interval = self._proactive_seconds()
         self._proactive_timer.reset()
-        # 音效开关（实际应用与持久化在 Game._save_user_config，经下面的回调触发）
+        # 音效 / 语音朗读开关（实际应用与持久化在 Game._save_user_config，经下面回调触发）
         self.sound_enabled = result["sound_enabled"]
+        self.tts_enabled = result["tts_enabled"]
         self._on_user_prefs_changed()  # 由 Game 合并写回 user_config（含窗口位置/提醒/主动互动）
 
         # 统一宠物名称：同时更新 Pet、人格服务与聊天窗口标题，并持久化人格
@@ -579,6 +587,8 @@ class UIManager:
             self._proactive_pending = False
             if text and not self.speech_bubble.visible:
                 self.speech_bubble.show(text, settings.PROACTIVE_BUBBLE_DURATION)
+                if self._tts is not None:
+                    self._tts.speak(text)
 
     def _process_ai_replies(self) -> None:
         """将后台线程中 AIService.chat() 返回的回复写回对话窗口。"""
@@ -587,6 +597,8 @@ class UIManager:
             self.chat_window.set_pending(False)
             self.chat_window.add_message("pet", reply)
             self._record_chat("pet", reply)
+            if self._tts is not None:
+                self._tts.speak(reply)
 
     def _record_chat(self, sender: str, text: str) -> None:
         """把一条可见对话写入聊天历史并持久化（超上限丢弃最旧）。"""

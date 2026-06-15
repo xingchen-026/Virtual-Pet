@@ -48,6 +48,7 @@ class SettingsWindow:
         self.proactive_enabled = settings.PROACTIVE_CHAT_ENABLED
         self.proactive_interval = settings.PROACTIVE_CHAT_INTERVAL_MINUTES
         self.sound_enabled = settings.SOUND_ENABLED
+        self.tts_enabled = settings.TTS_ENABLED
         self.provider = PROVIDERS[0]
         self.base_url = ""
         self.model = ""
@@ -71,6 +72,7 @@ class SettingsWindow:
         proactive_enabled: bool = settings.PROACTIVE_CHAT_ENABLED,
         proactive_interval: float = settings.PROACTIVE_CHAT_INTERVAL_MINUTES,
         sound_enabled: bool = settings.SOUND_ENABLED,
+        tts_enabled: bool = settings.TTS_ENABLED,
     ) -> None:
         """打开设置窗口，并以当前配置初始化各编辑项。"""
         self.visible = True
@@ -82,6 +84,7 @@ class SettingsWindow:
         self.proactive_enabled = proactive_enabled
         self.proactive_interval = proactive_interval
         self.sound_enabled = sound_enabled
+        self.tts_enabled = tts_enabled
         self.provider = ai_config.get("provider", PROVIDERS[0])
         if self.provider not in PROVIDERS:
             PROVIDERS.append(self.provider)
@@ -179,6 +182,8 @@ class SettingsWindow:
                 )
             elif name == "sound_toggle":
                 self.sound_enabled = not self.sound_enabled
+            elif name == "tts_toggle":
+                self.tts_enabled = not self.tts_enabled
             elif name == "provider":
                 self._provider_open = not self._provider_open
             elif name in ("name", "character", "tone", "base_url", "model", "api_key"):
@@ -261,6 +266,7 @@ class SettingsWindow:
             "proactive_enabled": self.proactive_enabled,
             "proactive_interval": self.proactive_interval,
             "sound_enabled": self.sound_enabled,
+            "tts_enabled": self.tts_enabled,
             "ai_config": self._collect_ai_config(),
         }
 
@@ -300,6 +306,7 @@ class SettingsWindow:
             "proactive_minus", "proactive_plus",
         )
         y = self._draw_toggle_row(panel, y, "互动音效", self.sound_enabled, "sound_toggle")
+        y = self._draw_toggle_row(panel, y, "语音朗读", self.tts_enabled, "tts_toggle")
         provider_rect, y = self._draw_provider_row(panel, y)
         y = self._draw_field_row(panel, y, "接口地址", "base_url", self.base_url or "（默认）")
         y = self._draw_field_row(panel, y, "模型", "model", self.model)

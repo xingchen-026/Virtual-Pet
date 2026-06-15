@@ -70,6 +70,7 @@ from core.event import InteractionEvent, InteractionEventType
 from core.feeding import FeedingController
 from core.fence import FenceController, popup_topleft
 from core.sound import SoundManager
+from core.tts import TTSManager
 from core.interaction import InteractionManager
 from core.pet import Pet
 from core.resource import ResourceManager
@@ -169,6 +170,11 @@ class Game:
             volume=settings.SOUND_VOLUME,
         )
 
+        # 语音朗读（可选 pyttsx3；UIManager 朗读主动发言/聊天回复，缺库自动降级）
+        self.tts = TTSManager(
+            enabled=self.user_config.get("tts_enabled", settings.TTS_ENABLED)
+        )
+
         # 窗口跟随控制器：维护"窗口中心 = 宠物屏幕坐标"，集中处理窗口移动/拖拽。
         # 优先使用上次退出时保存的窗口位置，否则用 desktop_manager 的初始位置
         self.window = WindowController(
@@ -238,6 +244,8 @@ class Game:
                 "proactive_interval_minutes", settings.PROACTIVE_CHAT_INTERVAL_MINUTES
             ),
             sound_enabled=self.user_config.get("sound_enabled", settings.SOUND_ENABLED),
+            tts=self.tts,
+            tts_enabled=self.user_config.get("tts_enabled", settings.TTS_ENABLED),
             on_feed_place_start=self._start_feed_placement,
             on_fence_toggle=self._toggle_fence,
             on_fence_view_toggle=self._toggle_fence_view,
@@ -718,6 +726,9 @@ class Game:
         # 音效开关：从 UI 读回当前值、持久化，并即时应用到 SoundManager
         self.user_config["sound_enabled"] = self.ui.sound_enabled
         self.sound.set_enabled(self.ui.sound_enabled)
+        # 语音朗读开关
+        self.user_config["tts_enabled"] = self.ui.tts_enabled
+        self.tts.set_enabled(self.ui.tts_enabled)
         fence = self.fence_controller.fence
         self.user_config["fence"] = list(fence) if fence else None
         self.user_config["fence_visible"] = self._fence_visible

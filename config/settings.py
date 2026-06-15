@@ -234,7 +234,7 @@ CHAT_WINDOW_HEIGHT = 420
 
 # 设置窗口尺寸（靠右侧停靠，垂直居中）。高度容纳「保存并退出」按钮行
 SETTINGS_WINDOW_WIDTH = 280
-SETTINGS_WINDOW_HEIGHT = 622
+SETTINGS_WINDOW_HEIGHT = 656
 
 # 皮肤选择窗口尺寸（靠右侧停靠，垂直居中；缩略图预览选择 + 缺失状态提示）
 SKIN_WINDOW_WIDTH = 300
@@ -300,6 +300,11 @@ FOOD_MAX_COUNT = 10
 # 互动音效总开关（可在设置窗口切换，存 user_config.sound_enabled）；音量 0~1
 SOUND_ENABLED = True
 SOUND_VOLUME = 0.45
+
+# ----- 语音朗读（TTS）-----
+# 朗读宠物主动发言/聊天回复的总开关（默认关，需用户主动开启；存 user_config.tts_enabled）。
+# 依赖可选库 pyttsx3，未安装则即便开启也自动静默降级。
+TTS_ENABLED = False
 
 
 # ----- AI 主动互动（宠物基于状态/记忆/时间主动冒泡说话）-----

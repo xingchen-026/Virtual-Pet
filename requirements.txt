@@ -7,3 +7,6 @@ Pillow>=10.0
 # 皮肤导入工具（tools/import_skin.py）依赖
 numpy>=1.26
 scipy>=1.11
+
+# 可选：语音朗读（TTS）。未安装时「语音朗读」自动静默降级，不影响其它功能
+pyttsx3>=2.90

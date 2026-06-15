@@ -28,8 +28,14 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：**美术升级路线（按 2→3→4→5 顺序，全完成后发 v1.1.0）**。已完成 #2、#3，进行 #4。
-- **最近一次完成**（未提交）：**#3 音效**：`core/sound.py` 的 `SoundManager` 用 numpy 程序化合成短音效
+- **正在进行**：**美术升级路线（按 2→3→4→5 顺序，全完成后发 v1.1.0）**。已完成 #2/#3/#4，进行 #5。
+- **最近一次完成**（未提交）：**#4 TTS 语音朗读**：`core/tts.py` 的 `TTSManager`（可选 pyttsx3，离线 SAPI5；
+  单后台线程串行朗读 + 队列积压丢弃 + 缺库/初始化失败优雅降级）；`Game` 创建 `self.tts` 传入 `UIManager`，
+  在主动发言（`_process_proactive`）与聊天回复（`_process_ai_replies`）处 `speak`；设置窗口加「语音朗读」开关
+  （默认关，持久化 `user_config.tts_enabled`，`_save_user_config` 即时 `set_enabled`）。`requirements.txt` 加 pyttsx3，
+  `SETTINGS_WINDOW_HEIGHT` 622→656。`tests/test_tts.py` +4（156→160）。实机冒烟：引擎就绪、朗读成功、设置开关布局正常。
+  ⚠️ 打 v1.1.0 时记得在干净 venv 里 `pip install pyttsx3`。
+- **更早一次完成**（未提交）：**#3 音效**：`core/sound.py` 的 `SoundManager` 用 numpy 程序化合成短音效
   （`render_event_samples` 纯函数渲染音符序列为 int16 立体声，`pygame.sndarray.make_sound` 缓存；
   音频设备不可用静默降级）；`Game` 在 `_dispatch_interaction` 按 `INTERACTION_SOUNDS` 播喂食/玩耍/洗澡/送礼/
   点击/兴奋音效（另留 levelup 给 #5）；设置窗口加「互动音效」开关（持久化 `user_config.sound_enabled`，
