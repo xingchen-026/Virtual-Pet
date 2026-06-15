@@ -129,8 +129,14 @@ def _remove_border_debris(cell_mask: np.ndarray) -> np.ndarray:
     规则：连通块同时满足「接触单元格边缘」且「面积小于最大连通块
     的 _BORDER_DEBRIS_RATIO 倍」时剔除；不贴边的小装饰
     （星星 / zZ / 气泡等）不受影响。
+
+    scipy 仅此处用到，且为可选优化：未安装（如精简打包的 exe）时
+    跳过碎片剔除、直接返回原掩码，网格切分主体不受影响。
     """
-    from scipy import ndimage
+    try:
+        from scipy import ndimage
+    except ImportError:
+        return cell_mask
 
     labels, count = ndimage.label(cell_mask)
     if count <= 1:

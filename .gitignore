@@ -4,6 +4,7 @@ __pycache__/
 
 # Virtual environment
 .venv/
+.build_venv/
 
 # Claude Code local config
 .claude/
@@ -16,3 +17,9 @@ config/ai_config.json.local
 
 # 聊天历史（运行时生成的用户对话，无需入库）
 data/chat_history.json
+
+# PyInstaller 打包产物（构建生成，无需入库）
+build/
+dist/
+*.spec
+packaging/

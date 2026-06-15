@@ -5,27 +5,48 @@
 """
 
 import os
+import shutil
+import sys
 
 # ----- 路径配置 -----
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ASSETS_DIR = os.path.join(BASE_DIR, "assets")
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# 兼容打包：PyInstaller(onefile) 冻结后，只读资源解压在临时目录 sys._MEIPASS，
+# 而运行期可写数据（存档/配置/日志/用户皮肤）需放在 exe 所在目录（便携）。
+# 开发态两者都等于项目根，路径与打包前完全一致。
+_FROZEN = getattr(sys, "frozen", False)
+_MODULE_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if _FROZEN:
+    RESOURCE_DIR = sys._MEIPASS                  # 打进 exe 的只读资源（解压临时目录）
+    APP_DIR = os.path.dirname(sys.executable)    # 可写数据目录：exe 所在文件夹
+else:
+    RESOURCE_DIR = _MODULE_BASE
+    APP_DIR = _MODULE_BASE
+
+# 兼容旧引用：BASE_DIR 仍指向代码/资源根（只读）。新增可写路径一律基于 APP_DIR。
+BASE_DIR = RESOURCE_DIR
+
+# 只读资源：动画/图片/声音
+ASSETS_DIR = os.path.join(RESOURCE_DIR, "assets")
+
+# 可写运行数据目录
+DATA_DIR = os.path.join(APP_DIR, "data")
 PET_DATA_FILE = os.path.join(DATA_DIR, "pet_data.json")
 
-# 自主行为参数配置文件（行为概率、速度、阈值等，禁止硬编码）
-BEHAVIOR_CONFIG_FILE = os.path.join(BASE_DIR, "config", "behavior_config.json")
+# 自主行为参数配置文件（只读，行为概率/速度/阈值等，禁止硬编码）
+BEHAVIOR_CONFIG_FILE = os.path.join(RESOURCE_DIR, "config", "behavior_config.json")
 
-# 行为日志目录与文件
-LOGS_DIR = os.path.join(BASE_DIR, "logs")
+# 行为日志目录与文件（可写）
+LOGS_DIR = os.path.join(APP_DIR, "logs")
 PET_BEHAVIOR_LOG_FILE = os.path.join(LOGS_DIR, "pet_behavior.log")
 
-# 桌面窗口参数配置文件（透明/置顶/初始位置等，禁止硬编码）
-DESKTOP_CONFIG_FILE = os.path.join(BASE_DIR, "config", "desktop_config.json")
+# 桌面窗口参数配置文件（只读，透明/置顶/初始位置等，禁止硬编码）
+DESKTOP_CONFIG_FILE = os.path.join(RESOURCE_DIR, "config", "desktop_config.json")
 
-# AI 服务配置文件（模型供应商/模型名称/参数，禁止硬编码）
-AI_CONFIG_FILE = os.path.join(BASE_DIR, "config", "ai_config.json")
+# AI 服务配置文件：用户填 Key 后会写回，故放可写目录；首次运行从只读模板播种。
+AI_CONFIG_FILE = os.path.join(APP_DIR, "config", "ai_config.json")
+AI_CONFIG_TEMPLATE_FILE = os.path.join(RESOURCE_DIR, "config", "ai_config.template.json")
 
-# 宠物人格配置与记忆数据文件
+# 宠物人格配置与记忆数据文件（可写）
 PERSONALITY_FILE = os.path.join(DATA_DIR, "personality.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 
@@ -33,12 +54,12 @@ MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 CHAT_HISTORY_FILE = os.path.join(DATA_DIR, "chat_history.json")
 CHAT_HISTORY_LIMIT = 60
 
-# 内容审查违规词配置（脏话/色情/暴力/政治敏感等，数据化便于增删）
-MODERATION_CONFIG_FILE = os.path.join(BASE_DIR, "config", "moderation.json")
+# 内容审查违规词配置（只读，脏话/色情/暴力/政治敏感等，数据化便于增删）
+MODERATION_CONFIG_FILE = os.path.join(RESOURCE_DIR, "config", "moderation.json")
 
 # ----- 用户偏好配置 -----
-# 设置窗口可修改的用户偏好（宠物大小等）
-USER_CONFIG_FILE = os.path.join(BASE_DIR, "config", "user_config.json")
+# 设置窗口可修改的用户偏好（宠物大小等），可写
+USER_CONFIG_FILE = os.path.join(APP_DIR, "config", "user_config.json")
 
 # 宠物缩放倍数的取值范围与调节步长
 PET_SCALE_MIN = 0.5
@@ -50,9 +71,12 @@ PET_SCALE_DEFAULT = 1.0
 ATTR_DELTA_DURATION = 2.5
 
 # ----- 皮肤配置 -----
-# 用户导入的皮肤目录与当前皮肤配置文件
-SKINS_DIR = os.path.join(ASSETS_DIR, "skins")
-SKIN_CONFIG_FILE = os.path.join(BASE_DIR, "config", "skin_config.json")
+# 皮肤目录与当前皮肤配置文件均可写：用户可新建皮肤、切换当前皮肤。
+# 内置皮肤（如 cat）随 exe 打包，首次运行由 ensure_user_data 播种到此目录。
+SKINS_DIR = os.path.join(APP_DIR, "assets", "skins")
+SKIN_CONFIG_FILE = os.path.join(APP_DIR, "config", "skin_config.json")
+# 内置皮肤的只读来源（开发态与 SKINS_DIR 相同；打包态在 exe 内部资源里）
+BUILTIN_SKINS_DIR = os.path.join(RESOURCE_DIR, "assets", "skins")
 
 # 皮肤帧统一输出尺寸（导入时归一化，与窗口大小匹配）
 SKIN_FRAME_SIZE = (128, 128)
@@ -271,3 +295,27 @@ FENCE_BORDER_WIDTH = 3
 FOOD_ICON_RADIUS = 14
 # 同时可摆放的食物上限：达到后再左键放置会被忽略并气泡提示
 FOOD_MAX_COUNT = 10
+
+
+def ensure_user_data() -> None:
+    """打包(onefile)首次运行时，把可写数据从只读资源播种到 exe 旁目录。
+
+    开发态 APP_DIR == RESOURCE_DIR，无需播种直接返回。打包态：
+    * 建好 config / data / logs 目录；
+    * ai_config.json 不存在则从模板（空 Key）拷贝，保证有合理默认且不泄露 Key；
+    * 内置皮肤目录不存在则整体拷过来，供 SkinManager 读取与用户新建皮肤共用。
+    其余可写文件（user_config / skin_config / 存档等）由 save_json 写时自建，无需预置。
+    由 main.py 在创建 Game 之前调用。
+    """
+    if not _FROZEN:
+        return
+
+    os.makedirs(os.path.join(APP_DIR, "config"), exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(LOGS_DIR, exist_ok=True)
+
+    if not os.path.exists(AI_CONFIG_FILE) and os.path.exists(AI_CONFIG_TEMPLATE_FILE):
+        shutil.copyfile(AI_CONFIG_TEMPLATE_FILE, AI_CONFIG_FILE)
+
+    if not os.path.isdir(SKINS_DIR) and os.path.isdir(BUILTIN_SKINS_DIR):
+        shutil.copytree(BUILTIN_SKINS_DIR, SKINS_DIR)

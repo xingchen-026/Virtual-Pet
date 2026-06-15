@@ -28,7 +28,17 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **最近一次完成**（未提交）：**围栏窗口化 + 鼠标取点 + 食物上限**（在下方「电子围栏」基础上迭代）：
+- **最近一次完成**（未提交）：**B 打包分发（PyInstaller onefile）**：`config/settings.py` 拆 `RESOURCE_DIR`(_MEIPASS)
+  与 `APP_DIR`(exe 旁)——只读资源（assets/动画/图片/声音、behavior/desktop/moderation 配置、ai_config 模板）走
+  RESOURCE，可写数据（data/、logs/、user_config/skin_config、用户皮肤 `SKINS_DIR`）走 APP；新增 `ensure_user_data()`
+  首运行播种（内置皮肤 copytree + ai_config 从 `config/ai_config.template.json` 拷贝，**绝不打包真实 Key**），`main.py`
+  建 Game 前调用。打包脚本 `tools/build_exe.py`（PyInstaller CLI，`--onefile --windowed`，os.pathsep 拼 add-data，
+  exclude scipy/matplotlib 等大库）+ `tools/make_icon.py`（取 cat idle 帧生成 `packaging/app_icon.ico`，故意不放
+  build/ 以免被 --clean 清掉）；`utils/spritesheet.py` 的 scipy 改 try/except 缺失降级。`.gitignore` 加
+  build/ dist/ *.spec packaging/ .build_venv/。**实机冒烟通过**：干净 venv 打出 **38MB** exe（全局脏环境曾打出 2.6GB），
+  在空目录运行自动播种（ai_config 空 Key 已核 + 内置皮肤 cat + data/logs）、宠物正常漫游、无 error.log。
+  开发态路径与原先完全一致，142 测试仍绿。**待办：提交 + push。**
+- **最近一次完成**（`1e89d8b`，已 push）：**围栏窗口化 + 鼠标取点 + 食物上限**（在下方「电子围栏」基础上迭代）：
   ①食物上限——`settings.FOOD_MAX_COUNT=10`；`FeedingController.add(point, max_count)` 返回 bool、新增 `is_full`；
   `Game._handle_feed_placement` 到顶忽略并气泡「先吃完这些」。
   ②围栏取点改为鼠标点两个对角（不再拖宠物）——点「围栏」进入**全屏取点态**（窗口铺满整屏透明遮罩、
@@ -51,7 +61,7 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
     LWA_ALPHA**（`DesktopManager.set_overlay_alpha` + `settings.OVERLAY_ALPHA/OVERLAY_BG_COLOR`，
     `_render` 遮罩态填压暗色），整屏皆可点、桌面淡淡压暗示意；退出经 `_apply_window_geometry`→`set_transparent`
     还原颜色键。Win32 层冒烟确认：取点态 flags=LWA_ALPHA(alpha=96)、退出还原 LWA_COLORKEY。
-- **更早一次完成**（未提交）：**电子围栏 + 喂食放置 + 设置保存退出**：
+- **更早一次完成**（`8fea886`，已 push）：**电子围栏 + 喂食放置 + 设置保存退出**：
   ①电子围栏——右键面板「围栏」按钮拖窗两点定角（点一次记宠物当前位置为一角、拖到对角再点定矩形，
   已有围栏时再点清除）；`core/fence.py` 的 `FenceController`（纯状态机 + `contains` + `popup_topleft` 布局函数）；
   `MovementController.set_fence/clear_fence` 把随机漫游夹到围栏内；存 `user_config.fence` 重启保留。
@@ -80,9 +90,12 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 - ⚠️历史事故：曾因冒烟测试写空 api_key 覆盖清空用户本地 Key（见「操作备忘」末条，已确立备份做法）。
 - **正在进行**：无（等待下一步指令）。
 - **下一步候选**（尚未开始，按需挑选）：
-  - 美术：接入正式素材/Lottie 动画，替换占位帧（唯一剩余候选）。
-  - 注：「工程向单测」「计时器聚合」已完成（见上「最近一次完成」）；
-    「拖放道具」已被否决；「皮肤切换图形化」已完成，均不再列为候选。
+  - **A. 美术升级**：接入正式素材 / GIF·APNG·Lottie 动画，替换占位帧（视觉是桌宠灵魂，最大短板；需素材）。
+  - **C. AI 主动互动**：宠物基于状态/记忆/时间主动冒泡说话（非被动等聊天），体验跃升；可选 TTS 朗读。
+  - **D. 健壮性**：多显示器 + DPI 缩放兼容（当前 `get_screen_size` 只取主屏、未设 DPI 感知，
+    围栏窗口化在多屏/非 100% 缩放机器上可能有坑，是新引入的技术债）。
+  - 注：「B 打包分发」已完成（见上）；「工程向单测」「计时器聚合」「皮肤切换图形化」已完成；
+    「拖放道具」已被否决，均不再列为候选。
 
 ---
 
@@ -235,6 +248,10 @@ python -m pytest tests/ -q            # 回归测试（当前 142 passed）
 # 导入皮肤（行模式 / 网格模式）
 python tools/import_skin.py 图.png --name 皮肤名 --states idle,happy,walk
 python tools/import_skin.py 表情图.png --name 皮肤名 --grid 3x6 --states excited,...,eating
+
+# 打包单文件 exe（务必在干净 venv 里，否则全局脏环境会打出超大 exe）
+python -m venv .build_venv && .build_venv/Scripts/python -m pip install pygame pywin32 pystray Pillow numpy pyinstaller
+.build_venv/Scripts/python tools/build_exe.py   # 产物 dist/VirtualPet.exe（约 38MB）
 ```
 
 **操作**：右键宠物弹面板（养成动作：喂食/玩耍/洗澡/睡觉/礼物 + 聊天/设置）；
@@ -253,6 +270,14 @@ python tools/import_skin.py 表情图.png --name 皮肤名 --grid 3x6 --states e
 - **皮肤网格切分**：均匀网格会把相邻格越界的精灵边缘切进来，`_remove_border_debris` 按「贴边且远小于主体」剔除；
   zZ/星星/气泡等合法装饰不受影响（阈值 `_BORDER_DEBRIS_RATIO`）。
 - **PowerShell/Bash**：本机两种 shell 都可用；停止桌宠用 `Get-Process python | Stop-Process -Force`。
+- **打包 exe 体积暴涨**：PyInstaller 按"运行它的那个 Python 的 site-packages"打包。用装了一堆科学计算库的
+  **全局 Python** 打包会把 numpy/scipy 等连带塞进去，曾打出 **2.6GB** 的 exe。务必在**干净 venv**
+  （仅 pygame/pywin32/pystray/Pillow/numpy/pyinstaller）里 `tools/build_exe.py`，得到约 **38MB**。
+  `build_exe.py` 已 `--exclude-module scipy/matplotlib/...` 兜底；scipy 仅皮肤网格碎片剔除可选用到，
+  `utils/spritesheet.py` 已对其 import 做缺失降级。
+- **打包勿泄 Key**：只打包 `config/ai_config.template.json`（空 Key），**绝不打包** `config/ai_config.json`
+  （含真实 Key、被 skip-worktree 屏蔽）；首运行 `ensure_user_data()` 据模板生成。打包后在空目录跑一次确认
+  生成的 `config/ai_config.json` 的 `api_key` 为空。
 - **冒烟测试勿污染真实配置**：`config/ai_config.json` 被 `git update-index --skip-worktree` 屏蔽，
   不显示在 `git status`，`git checkout` 也不还原。冒烟里任何会触发设置保存（写 ai_config）的操作
   前，必须先 `cp config/ai_config.json /tmp/bak` 备份、测后还原；否则会覆盖用户真实 API Key
