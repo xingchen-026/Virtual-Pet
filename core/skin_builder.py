@@ -24,7 +24,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageSequence
 
 from config import settings
 from utils.helper import load_json, save_json
@@ -239,16 +239,35 @@ def grouped_from_spritesheet(
     return _normalize_grouped(grouped)
 
 
+def load_image_frames(path: str) -> List[Image.Image]:
+    """读取一张图片为帧列表：动图（GIF / APNG）按帧序展开，静图返回单帧。
+
+    GIF/APNG 等动画文件直接作为某动画状态的多帧来源，逐帧合成并转 RGBA
+    （PIL 会按帧处置方式合成）。静态图片返回只含一帧的列表。
+    """
+    img = Image.open(path)
+    if getattr(img, "is_animated", False) and getattr(img, "n_frames", 1) > 1:
+        return [frame.convert("RGBA").copy() for frame in ImageSequence.Iterator(img)]
+    return [img.convert("RGBA")]
+
+
 def grouped_from_state_images(
     state_to_paths: Dict[str, List[str]],
     tolerance: float = DEFAULT_TOLERANCE,
     chroma_color: Optional[Tuple[int, int, int]] = None,
     mirror: bool = False,
 ) -> Dict[str, List[Image.Image]]:
-    """按状态图片得到归一化的各状态帧（不写文件，供构建与实时预览共用）。"""
+    """按状态图片得到归一化的各状态帧（不写文件，供构建与实时预览共用）。
+
+    每个状态可上传：单张静图、多张静图（各为一帧），或一张动图（GIF/APNG，
+    自动展开为该状态的多帧动画）；多个来源按上传顺序拼接。
+    """
     grouped: Dict[str, List[Image.Image]] = {}
     for state, paths in state_to_paths.items():
-        frames = [chroma_key(Image.open(p), chroma_color, tolerance) for p in paths]
+        frames: List[Image.Image] = []
+        for p in paths:
+            for frame in load_image_frames(p):
+                frames.append(chroma_key(frame, chroma_color, tolerance))
         if frames:
             grouped[state] = mirror_frames(frames) if mirror else frames
 

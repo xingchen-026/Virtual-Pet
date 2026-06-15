@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-_IMAGE_TYPES = [("图片", "*.png *.jpg *.jpeg *.bmp"), ("所有文件", "*.*")]
+_IMAGE_TYPES = [
+    ("图片/动图", "*.png *.jpg *.jpeg *.bmp *.gif"),  # APNG 用 .png 扩展名，已涵盖
+    ("所有文件", "*.*"),
+]
 
 
 def _hidden_root():

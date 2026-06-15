@@ -28,8 +28,12 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：无（等待提交/下一步指令）。
-- **最近一次完成**（未提交）：**设置窗口加主动互动开关/间隔**：`SettingsWindow` 新增「主动互动」开关行
+- **正在进行**：**美术升级路线（按 2→3→4→5 顺序，全完成后发 v1.1.0）**。已完成 #2，进行 #3。
+- **最近一次完成**（未提交）：**#2 美术升级·GIF/APNG 动画支持**：`skin_builder.load_image_frames`
+  （动图 GIF/APNG 用 `ImageSequence` 逐帧展开转 RGBA，静图单帧），`grouped_from_state_images` 改为每个
+  来源经 `load_image_frames` 展开——「按状态上传」可直接传一张 GIF/APNG 作为该状态多帧动画，预览/构建共用；
+  `utils/dialogs._IMAGE_TYPES` 加 `*.gif`（APNG 用 .png 已涵盖）。`tests/test_skin_builder.py` +3（动图展开/静图单帧/混合）（149→152）。
+- **更早一次完成**（`19c8383`，已 push）：**设置窗口加主动互动开关/间隔**：`SettingsWindow` 新增「主动互动」开关行
   （`_draw_toggle_row` 开/关）与「互动间隔」步进行（`_draw_stepper_row`，范围 `PROACTIVE_INTERVAL_MIN/MAX/STEP`），
   `open()`/`_result()` 带上 `proactive_enabled`/`proactive_interval`；`UIManager` 接收并在 `_apply_save` 更新、重置
   `_proactive_timer`，`_trigger_proactive` 先判 `proactive_enabled`；`Game` 从/向 `user_config` 读写

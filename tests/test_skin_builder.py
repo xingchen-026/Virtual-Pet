@@ -54,6 +54,43 @@ def test_mirror_frames_flips():
     assert flipped.getpixel((3, 0)) == (255, 0, 0, 255)
 
 
+def _save_gif(path, n_frames=4, size=(40, 40)):
+    """合成一张多帧 GIF（每帧一个不同位置的色块），返回路径。"""
+    frames = []
+    for i in range(n_frames):
+        im = Image.new("RGB", size, BG)
+        im.putpixel((2 + i, 2 + i), FG)
+        frames.append(im)
+    frames[0].save(
+        path, save_all=True, append_images=frames[1:], duration=80, loop=0
+    )
+    return str(path)
+
+
+def test_load_image_frames_static_single(tmp_path):
+    path = _save(_make_sheet(1, 1), tmp_path / "one.png")
+    frames = skin_builder.load_image_frames(path)
+    assert len(frames) == 1
+    assert frames[0].mode == "RGBA"
+
+
+def test_load_image_frames_gif_expands(tmp_path):
+    path = _save_gif(tmp_path / "anim.gif", n_frames=5)
+    frames = skin_builder.load_image_frames(path)
+    assert len(frames) == 5
+    assert all(f.mode == "RGBA" for f in frames)
+
+
+def test_grouped_from_state_images_expands_gif(tmp_path):
+    gif = _save_gif(tmp_path / "walk.gif", n_frames=6)
+    png = _save(_make_sheet(1, 1), tmp_path / "idle.png")
+    grouped = skin_builder.grouped_from_state_images({"walk": [gif], "idle": [png]})
+    assert len(grouped["walk"]) == 6  # GIF 展开为多帧
+    assert len(grouped["idle"]) == 1  # 静图仍为单帧
+    # 归一化后同尺寸
+    assert grouped["walk"][0].size == grouped["idle"][0].size
+
+
 def test_build_from_spritesheet_rows(tmp_path, monkeypatch):
     skins = _redirect_skins(tmp_path, monkeypatch)
     path = _save(_make_sheet(2, 3), tmp_path / "sheet.png")
