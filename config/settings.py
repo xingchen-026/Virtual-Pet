@@ -306,6 +306,22 @@ SOUND_VOLUME = 0.45
 # 依赖可选库 pyttsx3，未安装则即便开启也自动静默降级。
 TTS_ENABLED = False
 
+# ----- AI 文生图（生成自定义皮肤）-----
+# 默认接入 Agnes AI（OpenAI 兼容）；用户在窗口里自带 Key、可改 base_url 与模型。
+IMAGE_GEN_BASE_URL = "https://apihub.agnes-ai.com/v1"
+IMAGE_GEN_MODELS = ["agnes-image-2.1-flash", "agnes-image-2.0-flash"]
+IMAGE_GEN_SIZES = ["1024x1024", "768x768", "512x512"]
+IMAGE_GEN_TIMEOUT = 90
+# 追加到用户提示词后的风格/合规后缀：促成原创、纯色背景（便于抠图）、规避侵权
+IMAGE_GEN_PROMPT_SUFFIX = (
+    "，原创卡通形象，全身居中，简洁纯色背景，"
+    "不要包含任何已有作品/品牌/知名角色，不要文字或水印"
+)
+# 窗口内显示的版权/合规声明
+IMAGE_GEN_DISCLAIMER = (
+    "请勿生成受版权保护的角色或商标；生成图片的版权与合规责任由你及所选 AI 服务承担。"
+)
+
 # ----- 成长 / 等级养成 -----
 LEVEL_MAX = 99                      # 等级上限
 LEVEL_BASE_EXP = 100               # 升到下一级所需经验 = LEVEL_BASE_EXP * 当前等级

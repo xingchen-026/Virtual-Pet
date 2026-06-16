@@ -28,8 +28,16 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：美术资源（AI 生成）调研中——见下「下一步候选·美术」。
-- **最近一次完成**（未提交）：**等级解锁玩法 + 记忆遗忘策略**：
+- **正在进行**：无（AI 绘图功能已完成，等待提交/下一步指令）。
+- **最近一次完成**（未提交）：**AI 文生图生成皮肤（游戏内功能）**：接入 Agnes AI（OpenAI 兼容，
+  base `https://apihub.agnes-ai.com/v1`、`POST /images/generations`、`Bearer`、图片模型 `agnes-image-2.1/2.0-flash`）。
+  `core/image_gen.py` 的 `ImageGenClient`（urllib，url/b64 都处理，返回 PIL 图，`list_models`）；
+  `ui/image_gen_window.py` 模态窗口（自带 Key + 接口地址 + 模型/尺寸下拉 + 提示词 + 生成/应用为皮肤 + 预览 + 版权声明）；
+  右键面板「AI皮肤」按钮打开；`UIManager` 后台线程生成→队列回填预览、`_apply_ai_skin` 调 `Game._apply_ai_skin`
+  （存临时图→`build_from_state_images` 抠图+全状态→`_reload_skin` 启用）；配置存 `user_config.image_gen`（**Key 仅本地、不入库**）。
+  防侵权：提示词追加「原创/纯色背景/无品牌角色/无水印」后缀 + 窗口版权声明。`tests/test_image_gen.py` +6（169→175）。
+  实机冒烟：真 Key 生成 1024² 图→预览→应用为皮肤启用全程通过；已确认 Key 不在任何入库文件。
+- **更早一次完成**（`77978fc`，已 push）：**等级解锁玩法 + 记忆遗忘策略**：
   ①等级解锁——`settings.LEVEL_TITLES` 成长阶段称号（幼崽→…→传说），`Pet.title()` 取 <= 等级最高档；
   数值面板显示「Lv.N 称号」，注入 AI `pet_state_prompt`（人格随成长成熟），跨阶段升级弹「解锁称号」气泡
   （`Game._dispatch_interaction` 比较升级前后称号）。

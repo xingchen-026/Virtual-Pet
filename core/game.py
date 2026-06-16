@@ -246,6 +246,8 @@ class Game:
             sound_enabled=self.user_config.get("sound_enabled", settings.SOUND_ENABLED),
             tts=self.tts,
             tts_enabled=self.user_config.get("tts_enabled", settings.TTS_ENABLED),
+            image_gen_config=self.user_config.get("image_gen", {}),
+            on_ai_skin_apply=self._apply_ai_skin,
             on_feed_place_start=self._start_feed_placement,
             on_fence_toggle=self._toggle_fence,
             on_fence_view_toggle=self._toggle_fence_view,
@@ -311,6 +313,29 @@ class Game:
         self.skin_manager.set_active(skin_name)
         self.pet_sprite.animation_manager = self._build_animation_manager()
         self.pet_sprite._transform_cache.clear()
+
+    def _apply_ai_skin(self, pil_image):
+        """把 AI 生成的图片应用为当前宠物皮肤：抠图后所有动画状态用该图，即时启用。
+
+        复用按状态导入管线（自动抠纯色背景 + 归一化）。单图作各状态帧 -> 静态自定义外观。
+        返回 (成功, 提示文案) 供 UI 显示。由 UIManager 在主线程调用（会重建动画）。
+        """
+        from core import skin_builder
+        import os
+        import tempfile
+
+        try:
+            src = os.path.join(tempfile.gettempdir(), "agnes_ai_skin_src.png")
+            pil_image.convert("RGBA").save(src)
+            states = list(settings.ANIMATION_FOLDERS.keys())
+            skin_builder.build_from_state_images(
+                "ai_skin", {s: [src] for s in states}, chroma_color=None
+            )
+            self._reload_skin("ai_skin")
+            return True, "已应用为皮肤「ai_skin」，可在「皮肤」窗口切换回其它皮肤"
+        except Exception as exc:
+            log_exception(AIServiceError(f"应用 AI 皮肤失败: {exc}"))
+            return False, f"应用失败：{exc}"
 
     def create_skin(self, config: dict):
         """根据创建皮肤窗口的配置构建皮肤并即时启用，返回 (成功, 提示文案)。"""
@@ -747,6 +772,8 @@ class Game:
         # 语音朗读开关
         self.user_config["tts_enabled"] = self.ui.tts_enabled
         self.tts.set_enabled(self.ui.tts_enabled)
+        # AI 绘图配置（接口/Key/模型/尺寸）；仅本地 user_config，不入库
+        self.user_config["image_gen"] = self.ui.image_gen_config()
         fence = self.fence_controller.fence
         self.user_config["fence"] = list(fence) if fence else None
         self.user_config["fence_visible"] = self._fence_visible

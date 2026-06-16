@@ -32,6 +32,7 @@ from config import settings
 from core.ai.ai_service import AIService
 from core.event import InteractionEvent, InteractionEventType
 from ui.chat_window import ChatWindow
+from ui.image_gen_window import ImageGenWindow
 from ui.settings_window import SettingsWindow
 from ui.skin_creator import SkinCreator
 from ui.skin_window import SkinWindow
@@ -88,6 +89,8 @@ class UIManager:
         sound_enabled: bool = settings.SOUND_ENABLED,
         tts=None,
         tts_enabled: bool = settings.TTS_ENABLED,
+        image_gen_config: dict = None,
+        on_ai_skin_apply: Callable = None,
         on_feed_place_start: Callable[[], None] = None,
         on_fence_toggle: Callable[[], None] = None,
         on_fence_view_toggle: Callable[[], None] = None,
@@ -109,6 +112,7 @@ class UIManager:
         self._on_skin_create = on_skin_create
         self._on_feed_place_start = on_feed_place_start
         self._on_fence_toggle = on_fence_toggle
+        self._on_ai_skin_apply = on_ai_skin_apply
         self._on_fence_view_toggle = on_fence_view_toggle
         self._fence_view_label = fence_view_label
         self._on_quit = on_quit
@@ -175,6 +179,19 @@ class UIManager:
         )
         self.skin_creator = SkinCreator(font, creator_rect)
 
+        # AI 文生图（生成皮肤）窗口：自带 Key + 选模型 + 提示词 -> 生成 -> 应用为皮肤
+        imggen_size = (360, 500)
+        self._imggen_size = imggen_size
+        imggen_rect = pygame.Rect(
+            (window_size[0] - imggen_size[0]) // 2,
+            (window_size[1] - imggen_size[1]) // 2,
+            *imggen_size,
+        )
+        self.image_gen_window = ImageGenWindow(font, imggen_rect)
+        self._image_gen_config = dict(image_gen_config or {})
+        self._imggen_queue: "queue.Queue[tuple]" = queue.Queue()
+        self._imggen_image = None  # 最近一次生成的 PIL 图（供「应用为皮肤」）
+
         # AI 对话窗口：靠左侧停靠，避免遮挡居中的宠物。
         # UI 与 AIService 解耦，AI 回复在后台线程获取，经队列回传主循环。
         chat_rect = pygame.Rect(
@@ -237,17 +254,19 @@ class UIManager:
             or self.settings_window.visible
             or self.skin_window.visible
             or self.skin_creator.visible
+            or self.image_gen_window.visible
             or self.stats_panel.visible
         )
 
     @property
     def blocks_autonomous(self) -> bool:
-        """是否应暂停自主行为（聊天/设置/皮肤/创建窗口打开时窗口需保持静止）。"""
+        """是否应暂停自主行为（聊天/设置/皮肤/创建/AI绘图窗口打开时窗口需保持静止）。"""
         return (
             self.chat_window.visible
             or self.settings_window.visible
             or self.skin_window.visible
             or self.skin_creator.visible
+            or self.image_gen_window.visible
         )
 
     # ----- 事件路由 -----
@@ -274,6 +293,14 @@ class UIManager:
                 result = self.skin_creator.handle_event(event)
                 if result is not None:
                     self._handle_creator_result(result)
+            return True
+
+        # AI 绘图窗口为模态：打开期间吞掉全部事件
+        if self.image_gen_window.visible:
+            if event.type in (pygame.KEYDOWN, pygame.TEXTINPUT, pygame.MOUSEBUTTONDOWN):
+                result = self.image_gen_window.handle_event(event)
+                if result is not None:
+                    self._handle_imggen_result(result)
             return True
 
         # 皮肤选择窗口为模态：打开期间吞掉全部事件
@@ -346,6 +373,16 @@ class UIManager:
                 self._on_fence_view_toggle()
             return
 
+        # AI 绘图：打开文生图窗口（用上次保存的配置初始化）
+        if action == "ai_skin":
+            self.image_gen_window.rect = self._anchored_rect(
+                pygame.Rect(0, 0, *self._imggen_size)
+            )
+            self.image_gen_window.open(self._image_gen_config)
+            self.stats_panel.hide()
+            self.desktop_manager.focus()
+            return
+
         event_type = _PANEL_INTERACTION_TYPES.get(action)
         if event_type is not None:
             self._on_interaction(InteractionEvent(type=event_type))
@@ -399,6 +436,81 @@ class UIManager:
         if anchor is None:
             return default_rect.copy()
         return pygame.Rect(anchor[0], anchor[1], default_rect.width, default_rect.height)
+
+    # ----- AI 绘图（文生图生成皮肤） -----
+
+    def image_gen_config(self) -> dict:
+        """当前图片生成配置（供 Game 持久化到 user_config）。"""
+        return dict(self._image_gen_config)
+
+    def _handle_imggen_result(self, result: dict) -> None:
+        """分发 AI 绘图窗口的动作：生成 / 应用为皮肤 / 关闭。"""
+        action = result.get("action")
+        if action == "generate":
+            self._start_image_gen(result["config"], result["prompt"])
+        elif action == "apply":
+            self._apply_ai_skin()
+        # close 已在窗口内置处理（visible=False）
+
+    def _start_image_gen(self, config: dict, prompt: str) -> None:
+        """后台线程调用文生图接口；保存配置并即时持久化。"""
+        if not prompt:
+            self.image_gen_window.set_status("请先填写提示词", False)
+            return
+        self._image_gen_config = dict(config)
+        self._on_user_prefs_changed()  # 让 Game 写回 user_config（含 Key/模型）
+
+        self.image_gen_window.busy = True
+        self.image_gen_window.set_status("生成中，请稍候...", None)
+        full_prompt = prompt + settings.IMAGE_GEN_PROMPT_SUFFIX
+
+        def worker() -> None:
+            from core.image_gen import ImageGenClient, ImageGenError
+            try:
+                client = ImageGenClient(
+                    config.get("base_url", ""), config.get("api_key", ""),
+                    config.get("model", ""), config.get("size", "1024x1024"),
+                )
+                image = client.generate(full_prompt)
+                self._imggen_queue.put(("ok", image))
+            except ImageGenError as exc:
+                self._imggen_queue.put(("err", str(exc)))
+            except Exception as exc:  # 兜底，避免线程静默
+                log_exception(AIServiceError(f"AI 绘图异常: {exc}"))
+                self._imggen_queue.put(("err", f"生成失败：{exc}"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_ai_skin(self) -> None:
+        """把最近生成的图片应用为当前宠物皮肤（抠图 + 构建皮肤由 Game 完成）。"""
+        if self._imggen_image is None:
+            self.image_gen_window.set_status("请先生成一张图片", False)
+            return
+        if self._on_ai_skin_apply is None:
+            return
+        ok, msg = self._on_ai_skin_apply(self._imggen_image)
+        self.image_gen_window.set_status(msg, ok)
+
+    def _process_imggen(self) -> None:
+        """把后台生成结果回填到窗口（预览缩略图 / 状态）。"""
+        while not self._imggen_queue.empty():
+            kind, payload = self._imggen_queue.get_nowait()
+            self.image_gen_window.busy = False
+            if kind == "ok":
+                self._imggen_image = payload
+                self.image_gen_window.set_preview(self._scaled_preview(payload))
+                self.image_gen_window.set_status("生成成功！点「应用为皮肤」即可使用", True)
+            else:
+                self.image_gen_window.set_status(payload, False)
+
+    @staticmethod
+    def _scaled_preview(pil_image, box: int = 120):
+        """把 PIL 图缩放为不超过 box 的方形缩略图（pygame Surface）。"""
+        img = pil_image.convert("RGBA")
+        w, h = img.size
+        scale = min(box / w, box / h)
+        img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+        return pygame.image.fromstring(img.tobytes(), img.size, "RGBA").convert_alpha()
 
     def _handle_skin_result(self, result: tuple) -> None:
         """处理皮肤选择窗口的结果：选择切换 / 创建 / 补充缺失动画。"""
@@ -526,6 +638,7 @@ class UIManager:
         self._process_ai_replies()
         self._process_ai_test_results()
         self._process_proactive()
+        self._process_imggen()
         self._update_attr_deltas(dt)
         self._update_rest_reminder(dt)
         self._proactive_timer.update(dt)
@@ -667,6 +780,7 @@ class UIManager:
         self.settings_window.draw(screen)
         self.skin_window.draw(screen)
         self.skin_creator.draw(screen)
+        self.image_gen_window.draw(screen)
 
     def _stats_lines(self) -> List[str]:
         """生成数值信息面板的内容（右键点击宠物弹出）。

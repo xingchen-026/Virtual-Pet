@@ -29,7 +29,7 @@ BUTTON_ROWS = [
     [("喂食", "feed"), ("玩耍", "play"), ("洗澡", "bath")],
     [("睡觉", "sleep"), ("礼物", "gift"), ("围栏", "fence")],
     [("皮肤", "skin"), ("聊天", "chat"), ("设置", "settings")],
-    [("隐藏围栏", "fence_view")],
+    [("隐藏围栏", "fence_view"), ("AI皮肤", "ai_skin")],
 ]
 
 BUTTON_HEIGHT = 28
