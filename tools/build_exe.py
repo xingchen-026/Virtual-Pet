@@ -31,6 +31,7 @@ _DATAS = [
     ("config/desktop_config.json", "config"),
     ("config/moderation.json", "config"),
     ("config/ai_config.template.json", "config"),
+    (".env.example", "."),  # 隐私配置模板：首次运行播种到 exe 旁，引导用户填 Key
 ]
 
 # pystray 与 pyttsx3 的平台后端用动态导入加载，PyInstaller 静态分析发现不了，需显式声明

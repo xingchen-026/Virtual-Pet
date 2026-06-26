@@ -46,6 +46,15 @@ DESKTOP_CONFIG_FILE = os.path.join(RESOURCE_DIR, "config", "desktop_config.json"
 AI_CONFIG_FILE = os.path.join(APP_DIR, "config", "ai_config.json")
 AI_CONFIG_TEMPLATE_FILE = os.path.join(RESOURCE_DIR, "config", "ai_config.template.json")
 
+# 隐私数据（各类 API Key）统一放 .env（可写目录、已被 .gitignore 屏蔽，绝不入库）；
+# main.py 启动时由 utils.env.load_dotenv 读入 os.environ，各处按环境变量名取用。
+# .env.example 为入库模板，首次运行（打包态）播种到 exe 旁，引导用户复制为 .env 填写。
+ENV_FILE = os.path.join(APP_DIR, ".env")
+ENV_TEMPLATE_FILE = os.path.join(RESOURCE_DIR, ".env.example")
+# 文生图 API Key 的环境变量名（窗口未填时回退到该环境变量；与 ai_config 的
+# api_key_env=DEEPSEEK_API_KEY 同理，把密钥从配置文件移到 .env）。
+IMAGE_GEN_API_KEY_ENV = "IMAGE_GEN_API_KEY"
+
 # 宠物人格配置与记忆数据文件（可写）
 PERSONALITY_FILE = os.path.join(DATA_DIR, "personality.json")
 MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
@@ -312,15 +321,50 @@ IMAGE_GEN_BASE_URL = "https://apihub.agnes-ai.com/v1"
 IMAGE_GEN_MODELS = ["agnes-image-2.1-flash", "agnes-image-2.0-flash"]
 IMAGE_GEN_SIZES = ["1024x1024", "768x768", "512x512"]
 IMAGE_GEN_TIMEOUT = 90
-# 追加到用户提示词后的风格/合规后缀：促成原创、纯色背景（便于抠图）、规避侵权
+# 临时性网络错误（SSL 中断 / 超时 / 5xx / 429）自动重试次数与每次退避基数（秒）。
+# Agnes 接口偶发 SSL EOF，重试一次多半成功；整套生成时尤其能避免个别状态留空回退。
+IMAGE_GEN_RETRIES = 2
+IMAGE_GEN_RETRY_DELAY = 1.5
+# 追加到用户提示词后的风格/合规后缀（单图通用）。
+# 关键：强制「纯绿幕背景」而非"贴纸/对比色背景"——绿色离洋红色键最远，抠图后即便
+# 残留描边也不会是紫色；"贴纸"措辞会诱导模型给彩色背景+白边，反而制造紫边。实测有效。
 IMAGE_GEN_PROMPT_SUFFIX = (
-    "，原创卡通形象，全身居中，简洁纯色背景，"
-    "不要包含任何已有作品/品牌/知名角色，不要文字或水印"
+    "，简洁可爱的卡通吉祥物角色，圆润造型，清晰描边，单一主体；"
+    "背景为纯绿色（亮绿 RGB 0,255,0，整块平涂，无渐变、无阴影、无地面、无任何其它物体）；"
+    "原创形象，不含任何已有作品/品牌/知名角色，无文字、无水印、无边框"
 )
+# AI 皮肤抠图容差：AI 图背景常带渐变/噪点，容差略大以清除背景；配合二值抠图（feather=0）
+# 消除洋红色键下的紫色描边。
+IMAGE_GEN_CHROMA_TOLERANCE = 60.0
+
 # 窗口内显示的版权/合规声明
 IMAGE_GEN_DISCLAIMER = (
     "请勿生成受版权保护的角色或商标；生成图片的版权与合规责任由你及所选 AI 服务承担。"
 )
+
+# 「生成整套皮肤」时，把用户的角色描述改写成各动画状态的提示词：
+# 一致性靠在每条里原样重复用户的角色描述 + 下面这段轻量锚点（不写"多帧/精灵表"等
+# 会诱导模型一张图画多个姿势的措辞）。每张图都是单个角色的一个完整全身姿势。
+IMAGE_GEN_CONSISTENCY = "画面只有一个角色、全身完整可见、四肢和尾巴都不要出画、居中、四周留出空白"
+# 动画状态 -> 该状态的动作/表情描述（键须覆盖 ANIMATION_FOLDERS 的状态）。
+# 朝向策略：默认所有状态「正面面向镜头」，仅 walk/run/look_around 这三个移动相关
+# 状态「侧身朝右」（移动时朝向与位移一致，移动系统再按方向水平翻转）。朝向直接
+# 写进每条动作里，避免模型忽略。
+IMAGE_GEN_STATE_ACTIONS = {
+    "idle": "正面面向镜头、安静站立、放松、表情自然",
+    "happy": "正面面向镜头、开心地微笑、眼睛弯弯、轻轻跳跃",
+    "hungry": "正面面向镜头、肚子饿了、盯着前方食物、舔嘴",
+    "tired": "正面面向镜头、疲惫、打哈欠、眼神困倦",
+    "interact": "正面面向镜头、被主人抚摸、惬意眯眼、满足",
+    "excited": "正面面向镜头、非常兴奋、张开双手、活力满满",
+    "eating": "正面面向镜头、正在吃东西、捧着食物大口吃",
+    "playing": "正面面向镜头、在玩耍、活泼好动、欢快",
+    "sleep": "正面面向镜头、闭着眼睛睡觉、安详、头顶 zZ",
+    "sad": "正面面向镜头、委屈难过、低头、眼里含泪",
+    "walk": "侧身朝右行走、迈着步子",
+    "run": "侧身朝右快速奔跑、四肢张开、动感",
+    "look_around": "侧身朝右、好奇地抬头四处张望",
+}
 
 # ----- 成长 / 等级养成 -----
 LEVEL_MAX = 99                      # 等级上限
@@ -392,6 +436,12 @@ def ensure_user_data() -> None:
 
     if not os.path.exists(AI_CONFIG_FILE) and os.path.exists(AI_CONFIG_TEMPLATE_FILE):
         shutil.copyfile(AI_CONFIG_TEMPLATE_FILE, AI_CONFIG_FILE)
+
+    # 播种 .env 模板（不直接生成 .env，避免覆盖用户已填的密钥）：把 .env.example
+    # 拷到 exe 旁，引导用户复制为 .env 填写自己的 Key。
+    env_example_dst = os.path.join(APP_DIR, ".env.example")
+    if not os.path.exists(env_example_dst) and os.path.exists(ENV_TEMPLATE_FILE):
+        shutil.copyfile(ENV_TEMPLATE_FILE, env_example_dst)
 
     if not os.path.isdir(SKINS_DIR) and os.path.isdir(BUILTIN_SKINS_DIR):
         shutil.copytree(BUILTIN_SKINS_DIR, SKINS_DIR)

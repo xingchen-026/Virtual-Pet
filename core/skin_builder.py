@@ -256,24 +256,52 @@ def grouped_from_state_images(
     tolerance: float = DEFAULT_TOLERANCE,
     chroma_color: Optional[Tuple[int, int, int]] = None,
     mirror: bool = False,
+    feather: float = DEFAULT_FEATHER,
 ) -> Dict[str, List[Image.Image]]:
     """按状态图片得到归一化的各状态帧（不写文件，供构建与实时预览共用）。
 
     每个状态可上传：单张静图、多张静图（各为一帧），或一张动图（GIF/APNG，
     自动展开为该状态的多帧动画）；多个来源按上传顺序拼接。
+    feather=0 时抠图用二值 alpha（消除洋红色键下的紫色描边，见 build_alpha_mask）。
     """
     grouped: Dict[str, List[Image.Image]] = {}
     for state, paths in state_to_paths.items():
         frames: List[Image.Image] = []
         for p in paths:
             for frame in load_image_frames(p):
-                frames.append(chroma_key(frame, chroma_color, tolerance))
+                frames.append(chroma_key(frame, chroma_color, tolerance, feather))
         if frames:
             grouped[state] = mirror_frames(frames) if mirror else frames
 
     if not grouped:
         raise ValueError("未提供任何状态图片")
-    return _normalize_grouped(grouped)
+
+    normalized = _normalize_grouped(grouped)
+    if feather <= 0:
+        # 归一化里的 LANCZOS 缩放会把二值边缘重新插值出半透明像素，
+        # 在洋红色键下又混出紫色描边；缩放后再二值化 + 内缩，彻底清除。
+        normalized = {
+            state: [_binarize_alpha(f) for f in frames]
+            for state, frames in normalized.items()
+        }
+    return normalized
+
+
+def _binarize_alpha(image: Image.Image, threshold: int = 160) -> Image.Image:
+    """把 RGBA 帧的 alpha 二值化（>=threshold→255 否则 0）并向内侵蚀 1 像素。
+
+    用于 AI 皮肤：消除缩放重采样产生的半透明边缘（洋红色键下的紫色描边）与
+    被背景色污染的最外圈描边。
+    """
+    arr = np.array(image.convert("RGBA"))
+    fg = arr[:, :, 3] >= threshold
+    er = fg.copy()
+    er[1:, :] &= fg[:-1, :]
+    er[:-1, :] &= fg[1:, :]
+    er[:, 1:] &= fg[:, :-1]
+    er[:, :-1] &= fg[:, 1:]
+    arr[:, :, 3] = np.where(er, 255, 0).astype(np.uint8)
+    return Image.fromarray(arr, "RGBA")
 
 
 def preview_grouped(config: dict) -> Dict[str, List[Image.Image]]:
@@ -316,9 +344,15 @@ def build_from_state_images(
     chroma_color: Optional[Tuple[int, int, int]] = None,
     mirror: bool = False,
     frame_durations: Optional[Dict[str, float]] = None,
+    feather: float = DEFAULT_FEATHER,
 ) -> dict:
-    """按状态上传图片构建皮肤：state_to_paths 为 {状态: [图片路径, ...]}。"""
-    grouped = grouped_from_state_images(state_to_paths, tolerance, chroma_color, mirror)
+    """按状态上传图片构建皮肤：state_to_paths 为 {状态: [图片路径, ...]}。
+
+    feather=0 用二值抠图（消除洋红色键下的紫色描边），AI 文生图皮肤即用此模式。
+    """
+    grouped = grouped_from_state_images(
+        state_to_paths, tolerance, chroma_color, mirror, feather
+    )
     return write_skin(name, grouped, "", frame_durations)
 
 

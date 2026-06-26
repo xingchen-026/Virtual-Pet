@@ -185,3 +185,26 @@ def test_mirror_build(tmp_path, monkeypatch):
     # 仅验证带镜像构建不报错且帧数正确
     manifest = skin_builder.build_from_spritesheet("m", path, states=["idle"], mirror=True)
     assert manifest["states"]["idle"] == 2
+
+
+def test_binary_alpha_mask_no_partial_pixels():
+    """feather=0 时 alpha 仅 0/255（消除洋红色键下的紫色半透明描边）。"""
+    from utils.spritesheet import build_alpha_mask
+    img = _make_sheet(1, 1)  # 纯背景 BG + 中心前景 FG 块
+    soft = build_alpha_mask(img, BG, tolerance=40, feather=30)
+    hard = build_alpha_mask(img, BG, tolerance=40, feather=0)
+    assert set(np.unique(hard)).issubset({0, 255})       # 二值，无半透明
+    assert hard.max() == 255 and hard.min() == 0          # 既有前景也有背景
+    # 软边模式通常会产生中间过渡值（半透明）
+    assert (soft > 0).any() and (soft < 255).any()
+
+
+def test_ai_skin_frames_binary_alpha_after_resize(tmp_path):
+    """feather=0 的整套构建：缩放后帧 alpha 仍为二值（不会重新出现半透明->紫边）。"""
+    big = _save(_make_sheet(1, 1, cell=300, blob=160), tmp_path / "big.png")  # 大图触发缩放
+    grouped = skin_builder.grouped_from_state_images(
+        {"idle": [big]}, tolerance=60, feather=0,
+    )
+    alpha = np.asarray(grouped["idle"][0])[:, :, 3]
+    assert set(np.unique(alpha)).issubset({0, 255})  # 缩放后仍二值
+    assert alpha.max() == 255  # 仍保留前景

@@ -63,12 +63,27 @@ def build_alpha_mask(
     距离 <= tolerance 的像素视为背景（alpha=0）；
     距离在 tolerance ~ tolerance+feather 之间的像素线性过渡，
     使抗锯齿边缘平滑，避免出现硬边/背景色描边。
+
+    feather <= 0 时输出**二值 alpha**（仅 0 或 255）并向内侵蚀 1 像素：
+    透明桌宠窗口用洋红色键合成，半透明边缘像素会与洋红混合成无法被色键剔除的
+    紫色描边；二值化消除半透明像素、侵蚀去掉最外圈被背景色污染的描边像素，
+    彻底避免「紫色污染」。AI 文生图皮肤即用此模式。
     """
     rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
     distance = np.sqrt(((rgb - np.array(bg_color, dtype=np.float32)) ** 2).sum(axis=2))
 
-    alpha = (distance - tolerance) / max(feather, 1.0)
-    return (alpha.clip(0.0, 1.0) * 255).astype(np.uint8)
+    if feather > 0:
+        alpha = (distance - tolerance) / feather
+        return (alpha.clip(0.0, 1.0) * 255).astype(np.uint8)
+
+    # 二值 + 1 像素侵蚀（仅保留四邻域都是前景的像素，削掉被背景污染的最外圈）
+    fg = distance > tolerance
+    eroded = fg.copy()
+    eroded[1:, :] &= fg[:-1, :]
+    eroded[:-1, :] &= fg[1:, :]
+    eroded[:, 1:] &= fg[:, :-1]
+    eroded[:, :-1] &= fg[:, 1:]
+    return np.where(eroded, 255, 0).astype(np.uint8)
 
 
 def _find_runs(flags: np.ndarray, min_gap: int, min_size: int) -> List[Tuple[int, int]]:

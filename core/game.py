@@ -247,7 +247,7 @@ class Game:
             tts=self.tts,
             tts_enabled=self.user_config.get("tts_enabled", settings.TTS_ENABLED),
             image_gen_config=self.user_config.get("image_gen", {}),
-            on_ai_skin_apply=self._apply_ai_skin,
+            on_ai_skin_apply_states=self._apply_ai_skin_states,
             on_feed_place_start=self._start_feed_placement,
             on_fence_toggle=self._toggle_fence,
             on_fence_view_toggle=self._toggle_fence_view,
@@ -314,28 +314,59 @@ class Game:
         self.pet_sprite.animation_manager = self._build_animation_manager()
         self.pet_sprite._transform_cache.clear()
 
-    def _apply_ai_skin(self, pil_image):
-        """把 AI 生成的图片应用为当前宠物皮肤：抠图后所有动画状态用该图，即时启用。
+    def _apply_ai_skin_states(self, state_to_image, name=""):
+        """把 AI 整套生成的「各状态图片」构建成一个**独立的新皮肤**并即时启用。
 
-        复用按状态导入管线（自动抠纯色背景 + 归一化）。单图作各状态帧 -> 静态自定义外观。
-        返回 (成功, 提示文案) 供 UI 显示。由 UIManager 在主线程调用（会重建动画）。
+        state_to_image: {动画状态: PIL 图}。每次生成都用唯一/指定的皮肤名，构建前先
+        清空该皮肤目录，避免与上一次生成的帧合并（不同角色混进同一皮肤）。缺失的状态
+        回退到内置动画。返回 (成功, 提示文案)；由 UIManager 在主线程调用（会重建动画）。
         """
         from core import skin_builder
         import os
+        import shutil
         import tempfile
 
         try:
-            src = os.path.join(tempfile.gettempdir(), "agnes_ai_skin_src.png")
-            pil_image.convert("RGBA").save(src)
-            states = list(settings.ANIMATION_FOLDERS.keys())
+            if not state_to_image:
+                return False, "没有可用的生成结果"
+
+            skin_name = self._sanitize_skin_name(name)
+            # 全新构建：先删掉同名皮肤目录，确保不与历史帧合并
+            skin_dir = os.path.join(settings.SKINS_DIR, skin_name)
+            if os.path.isdir(skin_dir):
+                shutil.rmtree(skin_dir, ignore_errors=True)
+
+            tmpdir = tempfile.gettempdir()
+            state_paths = {}
+            for state, image in state_to_image.items():
+                path = os.path.join(tmpdir, f"agnes_ai_{state}.png")
+                image.convert("RGBA").save(path)
+                state_paths[state] = [path]
+
+            # 二值抠图（feather=0）+ 略大容差：消除洋红色键下的紫色描边
             skin_builder.build_from_state_images(
-                "ai_skin", {s: [src] for s in states}, chroma_color=None
+                skin_name, state_paths, chroma_color=None,
+                tolerance=settings.IMAGE_GEN_CHROMA_TOLERANCE, feather=0,
             )
-            self._reload_skin("ai_skin")
-            return True, "已应用为皮肤「ai_skin」，可在「皮肤」窗口切换回其它皮肤"
+            self._reload_skin(skin_name)
+            total = len(settings.IMAGE_GEN_STATE_ACTIONS)
+            done = len(state_paths)
+            extra = "" if done >= total else f"，缺 {total - done} 个回退内置动画"
+            return True, f"已生成新皮肤「{skin_name}」（{done}/{total} 状态{extra}）并启用"
         except Exception as exc:
             log_exception(AIServiceError(f"应用 AI 皮肤失败: {exc}"))
             return False, f"应用失败：{exc}"
+
+    @staticmethod
+    def _sanitize_skin_name(name) -> str:
+        """清洗皮肤名：去非法字符；为空则用时间戳生成唯一名（每次生成各自独立）。"""
+        import datetime
+        import re
+
+        cleaned = re.sub(r"[^0-9A-Za-z一-鿿_-]", "", (name or "").strip())
+        if not cleaned:
+            cleaned = "ai_" + datetime.datetime.now().strftime("%m%d_%H%M%S")
+        return cleaned[:40]
 
     def create_skin(self, config: dict):
         """根据创建皮肤窗口的配置构建皮肤并即时启用，返回 (成功, 提示文案)。"""

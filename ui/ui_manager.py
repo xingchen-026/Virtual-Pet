@@ -90,7 +90,7 @@ class UIManager:
         tts=None,
         tts_enabled: bool = settings.TTS_ENABLED,
         image_gen_config: dict = None,
-        on_ai_skin_apply: Callable = None,
+        on_ai_skin_apply_states: Callable = None,
         on_feed_place_start: Callable[[], None] = None,
         on_fence_toggle: Callable[[], None] = None,
         on_fence_view_toggle: Callable[[], None] = None,
@@ -112,7 +112,7 @@ class UIManager:
         self._on_skin_create = on_skin_create
         self._on_feed_place_start = on_feed_place_start
         self._on_fence_toggle = on_fence_toggle
-        self._on_ai_skin_apply = on_ai_skin_apply
+        self._on_ai_skin_apply_states = on_ai_skin_apply_states
         self._on_fence_view_toggle = on_fence_view_toggle
         self._fence_view_label = fence_view_label
         self._on_quit = on_quit
@@ -180,7 +180,7 @@ class UIManager:
         self.skin_creator = SkinCreator(font, creator_rect)
 
         # AI 文生图（生成皮肤）窗口：自带 Key + 选模型 + 提示词 -> 生成 -> 应用为皮肤
-        imggen_size = (360, 500)
+        imggen_size = (360, 540)
         self._imggen_size = imggen_size
         imggen_rect = pygame.Rect(
             (window_size[0] - imggen_size[0]) // 2,
@@ -444,64 +444,110 @@ class UIManager:
         return dict(self._image_gen_config)
 
     def _handle_imggen_result(self, result: dict) -> None:
-        """分发 AI 绘图窗口的动作：生成 / 应用为皮肤 / 关闭。"""
+        """分发 AI 绘图窗口的动作：生成预览（单图）/ 生成整套皮肤 / 关闭。"""
         action = result.get("action")
         if action == "generate":
             self._start_image_gen(result["config"], result["prompt"])
-        elif action == "apply":
-            self._apply_ai_skin()
+        elif action == "batch":
+            self._start_image_gen_batch(
+                result["config"], result["prompt"], result.get("name", "")
+            )
         # close 已在窗口内置处理（visible=False）
 
-    def _start_image_gen(self, config: dict, prompt: str) -> None:
-        """后台线程调用文生图接口；保存配置并即时持久化。"""
-        if not prompt:
-            self.image_gen_window.set_status("请先填写提示词", False)
-            return
+    def _save_imggen_config(self, config: dict) -> None:
         self._image_gen_config = dict(config)
         self._on_user_prefs_changed()  # 让 Game 写回 user_config（含 Key/模型）
 
+    def _start_image_gen(self, config: dict, prompt: str) -> None:
+        """生成预览：后台线程出一张图，仅用于确认角色外观（不应用为皮肤）。"""
+        if not prompt:
+            self.image_gen_window.set_status("请先填写提示词", False)
+            return
+        self._save_imggen_config(config)
         self.image_gen_window.busy = True
-        self.image_gen_window.set_status("生成中，请稍候...", None)
-        full_prompt = prompt + settings.IMAGE_GEN_PROMPT_SUFFIX
+        self.image_gen_window.set_status("生成预览中，请稍候...", None)
+        # 预览用 idle 状态的完整提示词（与「生成整套」一致），让预览真实代表成品效果
+        from core.image_gen import build_state_prompts
+        full_prompt = build_state_prompts(prompt, ["idle"])["idle"]
 
         def worker() -> None:
             from core.image_gen import ImageGenClient, ImageGenError
             try:
-                client = ImageGenClient(
-                    config.get("base_url", ""), config.get("api_key", ""),
-                    config.get("model", ""), config.get("size", "1024x1024"),
-                )
-                image = client.generate(full_prompt)
-                self._imggen_queue.put(("ok", image))
+                client = self._make_imggen_client(config)
+                self._imggen_queue.put(("ok", client.generate(full_prompt)))
             except ImageGenError as exc:
                 self._imggen_queue.put(("err", str(exc)))
-            except Exception as exc:  # 兜底，避免线程静默
+            except Exception as exc:
                 log_exception(AIServiceError(f"AI 绘图异常: {exc}"))
                 self._imggen_queue.put(("err", f"生成失败：{exc}"))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _apply_ai_skin(self) -> None:
-        """把最近生成的图片应用为当前宠物皮肤（抠图 + 构建皮肤由 Game 完成）。"""
-        if self._imggen_image is None:
-            self.image_gen_window.set_status("请先生成一张图片", False)
+    def _start_image_gen_batch(self, config: dict, prompt: str, name: str = "") -> None:
+        """生成整套：把角色描述改写为各状态提示词，逐状态生成，完成后构建并应用为新皮肤。"""
+        if not prompt:
+            self.image_gen_window.set_status("请先填写提示词", False)
             return
-        if self._on_ai_skin_apply is None:
-            return
-        ok, msg = self._on_ai_skin_apply(self._imggen_image)
-        self.image_gen_window.set_status(msg, ok)
+        self._save_imggen_config(config)
+        self._imggen_skin_name = name  # 本次整套要构建的皮肤名（空则 Game 用时间戳）
+        self.image_gen_window.busy = True
+        self.image_gen_window.set_status("开始生成整套皮肤...", None)
+
+        def worker() -> None:
+            from core.image_gen import ImageGenClient, ImageGenError, build_state_prompts
+            prompts = build_state_prompts(prompt)
+            total = len(prompts)
+            client = self._make_imggen_client(config)
+            images = {}
+            for i, (state, p) in enumerate(prompts.items(), 1):
+                try:
+                    img = client.generate(p)
+                    images[state] = img
+                    self._imggen_queue.put(("step", i, total, state, img))
+                except Exception as exc:
+                    self._imggen_queue.put(("warn", i, total, state, str(exc)))
+            if images:
+                self._imggen_queue.put(("batch_done", images))
+            else:
+                self._imggen_queue.put(("err", "整套生成均失败，请检查 Key/模型/网络"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    @staticmethod
+    def _make_imggen_client(config: dict):
+        from core.image_gen import ImageGenClient
+        return ImageGenClient(
+            config.get("base_url", ""), config.get("api_key", ""),
+            config.get("model", ""), config.get("size", "1024x1024"),
+        )
 
     def _process_imggen(self) -> None:
-        """把后台生成结果回填到窗口（预览缩略图 / 状态）。"""
+        """把后台生成结果回填窗口：单图预览 / 整套进度 / 整套完成后应用皮肤。"""
         while not self._imggen_queue.empty():
-            kind, payload = self._imggen_queue.get_nowait()
-            self.image_gen_window.busy = False
-            if kind == "ok":
-                self._imggen_image = payload
-                self.image_gen_window.set_preview(self._scaled_preview(payload))
-                self.image_gen_window.set_status("生成成功！点「应用为皮肤」即可使用", True)
-            else:
-                self.image_gen_window.set_status(payload, False)
+            msg = self._imggen_queue.get_nowait()
+            kind = msg[0]
+            if kind == "ok":  # 单图预览
+                self.image_gen_window.busy = False
+                self._imggen_image = msg[1]
+                self.image_gen_window.set_preview(self._scaled_preview(msg[1]))
+                self.image_gen_window.set_status("预览生成成功！满意就点「生成整套皮肤」", True)
+            elif kind == "err":
+                self.image_gen_window.busy = False
+                self.image_gen_window.set_status(msg[1], False)
+            elif kind == "step":  # 整套进度 (i,total,state,img)
+                _, i, total, state, img = msg
+                self.image_gen_window.set_preview(self._scaled_preview(img))
+                self.image_gen_window.set_status(f"生成整套中 {i}/{total}：{state}", None)
+            elif kind == "warn":
+                _, i, total, state, _err = msg
+                self.image_gen_window.set_status(f"{i}/{total} {state} 失败，跳过该状态", None)
+            elif kind == "batch_done":  # 应用整套为皮肤（主线程，重建动画）
+                self.image_gen_window.busy = False
+                images = msg[1]
+                if self._on_ai_skin_apply_states is not None:
+                    name = getattr(self, "_imggen_skin_name", "")
+                    ok, text = self._on_ai_skin_apply_states(images, name)
+                    self.image_gen_window.set_status(text, ok)
 
     @staticmethod
     def _scaled_preview(pil_image, box: int = 120):

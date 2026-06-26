@@ -28,8 +28,28 @@ AI 辅助编程（Vibe Coding）实践经验，当前持续开发 Virtual-Pet �
 
 ## 任务清单 / 当前状态（CURRENT）
 
-- **正在进行**：无（AI 绘图功能已完成，等待提交/下一步指令）。
-- **最近一次完成**（未提交）：**AI 文生图生成皮肤（游戏内功能）**：接入 Agnes AI（OpenAI 兼容，
+- **正在进行**：无（AI 绘图质量+隐私治理已完成，等待提交/下一步指令）。
+- **最近一次完成**（未提交）：**AI 绘图质量打磨 + 隐私数据迁移到 .env**：
+  ①出图质量——盲调提示词无效后，改为**真实调 API 出图、用 Read 亲眼检查**定位根因：旧提示词的「贴纸」
+  措辞会诱导洋红/紫背景（恰与色键 `(255,0,255)` 重合）→ 紫边去不掉。改为**强制纯绿幕背景(0,255,0)**
+  （远离色键，抠图干净无紫边）+ 去「贴纸」措辞 → 一举解决紫边/背景杂乱/不是全身/构图怪/角色不一致/画风。
+  ②朝向统一——`IMAGE_GEN_STATE_ACTIONS` 把朝向写进每条动作：仅 walk/run/look_around 侧身朝右，其余 10 态
+  正面面向用户（用户选定）。③合并 Bug——每次「生成整套」构建**独立命名新皮肤**（`_sanitize_skin_name`
+  时间戳兜底）+ 构建前 `rmtree` 清目录，不再混入历史帧；窗口加「皮肤名称」输入框。④抠图——`feather=0`
+  二值 alpha + 缩放后再二值化+1px 内缩，消除 LANCZOS 重采样的半透明紫边。⑤**隐私迁移到 .env**——
+  新增 `utils/env.py`（极简 dotenv 加载器）、`.env.example`（入库模板）、`.env`（本地真实 Key，gitignore 屏蔽）；
+  `main.py` 启动 `load_dotenv` 注入环境变量；`ImageGenClient` Key 为空时回退 `IMAGE_GEN_API_KEY` 环境变量
+  （聊天侧 `llm_client` 早已支持 `DEEPSEEK_API_KEY`）；`ai_config.json`/`user_config.json` 本地 Key 清空、
+  密钥只留 `.env`；`build_exe.py` 打包 `.env.example`、`ensure_user_data` 首次运行播种。
+  `tests/test_env.py` +7、`test_image_gen.py` +2（179→188）。实机：`gold_dog` 整套皮肤干净无紫边、朝向正确。
+  ⚠️ 两个 Key 曾在明文出现，建议轮换。
+- **再一次细节打磨**（未提交，承接上条）：⑥**出图鲁棒性/体验细节**——A) 临时性网络错误自动重试：
+  `ImageGenError.transient` 标志（5xx/429/SSL 中断/超时为 True，4xx 鉴权/参数为 False），`generate` 按
+  `IMAGE_GEN_RETRIES`(2)/`IMAGE_GEN_RETRY_DELAY`(1.5s 递增) 重试——根治 Agnes 偶发 SSL EOF 导致整套生成个别
+  状态留空回退；B) 「生成预览」改用 `build_state_prompts(prompt,["idle"])` 的 idle 完整提示词，让预览真实
+  代表成品（原来只 `prompt+SUFFIX`、缺动作/一致性锚点）；C) 整套结果提示改为「N/总数 状态，缺 X 个回退内置」。
+  `test_image_gen.py` +3（188→191）。实机：单次 `generate` 调用内部重试穿透 SSL 抖动成功（不再需外层循环）。
+- **更早一次完成**（未提交）：**AI 文生图生成皮肤（游戏内功能）**：接入 Agnes AI（OpenAI 兼容，
   base `https://apihub.agnes-ai.com/v1`、`POST /images/generations`、`Bearer`、图片模型 `agnes-image-2.1/2.0-flash`）。
   `core/image_gen.py` 的 `ImageGenClient`（urllib，url/b64 都处理，返回 PIL 图，`list_models`）；
   `ui/image_gen_window.py` 模态窗口（自带 Key + 接口地址 + 模型/尺寸下拉 + 提示词 + 生成/应用为皮肤 + 预览 + 版权声明）；

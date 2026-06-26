@@ -12,15 +12,19 @@
 from config import settings
 from core.desktop import enable_dpi_awareness
 from core.game import Game
+from utils.env import load_dotenv
 
 
 def main():
     # 必须在创建任何窗口（Game.__init__ 的 pygame.init/set_mode）之前设置 DPI 感知，
     # 否则缩放/多屏显示器下窗口与取点坐标会错位。
     enable_dpi_awareness()
-    # 打包(onefile)首次运行时，把可写数据（配置/存档/内置皮肤）播种到 exe 旁目录；
-    # 开发态为空操作。必须在创建 Game 之前，Game.__init__ 会读取这些配置。
+    # 打包(onefile)首次运行时，把可写数据（配置/存档/内置皮肤/.env.example）播种到
+    # exe 旁目录；开发态为空操作。必须在创建 Game 之前，Game.__init__ 会读取这些配置。
     settings.ensure_user_data()
+    # 加载 .env 隐私配置（API Key 等）到环境变量，供 LLM / 文生图客户端按需取用。
+    # 须在创建 Game（会构造 AI 客户端）之前；文件不存在则静默跳过。
+    load_dotenv(settings.ENV_FILE)
     game = Game()
     game.run()
 

@@ -12,7 +12,8 @@ __pycache__/
 # 自主行为系统运行日志（运行时生成，无需入库）
 logs/
 
-# 本地 AI 配置备份（含真实 API Key，严禁入库）
+# 隐私配置：所有真实 API Key 放 .env（严禁入库）；入库的是 .env.example 模板
+.env
 config/ai_config.json.local
 
 # 聊天历史（运行时生成的用户对话，无需入库）

@@ -105,13 +105,29 @@ VirtualPet/
    运行时依赖 pygame / pywin32 / pystray / Pillow；
    皮肤导入工具另需 numpy / scipy。
 
-2. （可选）配置 AI 对话功能：
+2. （可选）配置 API 密钥（AI 对话 / AI 绘图）：
 
-   - 编辑 `config/ai_config.json`，设置 `provider`（`openai` / `deepseek` / `local`）、
-     `model`、`api_base` 等参数。
-   - 设置对应的 API Key 环境变量（默认 `DEEPSEEK_API_KEY`，对应
-     `ai_config.json` 中的 `api_key_env`）。
-   - 未配置或网络不可用时，AI 对话自动降级为离线提示，桌宠核心功能不受影响。
+   所有隐私数据（API Key）统一放在项目根目录的 **`.env`** 文件里——它已被
+   `.gitignore` 屏蔽，**绝不会提交到仓库**，可放心填写真实密钥。
+
+   - 复制模板：把 `.env.example` 复制为 `.env`；
+   - 按注释填入你自己的密钥（不要加引号，等号两侧不要留空格）：
+
+     ```dotenv
+     DEEPSEEK_API_KEY=你的聊天LLM密钥      # AI 对话 / 主动互动（默认 DeepSeek）
+     IMAGE_GEN_API_KEY=你的文生图密钥       # AI 绘图生成皮肤（默认 Agnes AI）
+     ```
+
+   - 保存后重启程序即可生效。留空的项对应功能会被禁用（如不填聊天 Key 则 AI 对话
+     降级为离线提示），其余桌宠功能不受影响。
+
+   说明：
+   - 换其它聊天服务商（OpenAI 等）：改 `config/ai_config.json` 的
+     `provider` / `api_base` / `api_key_env`，再在 `.env` 里填对应名字的变量。
+   - 也可在游戏窗口里临时填写 Key（设置窗口填聊天 Key、「AI皮肤」窗口填绘图 Key）；
+     窗口留空时自动回退到 `.env`。已 `export` 到系统的同名环境变量优先级最高。
+   - **务必不要把密钥写进任何会入库的文件**（`ai_config.json` / `user_config.json`
+     的仓库版均为空 Key，本地版已 `skip-worktree` 屏蔽）。
 
 3. 运行程序：
 
@@ -156,9 +172,12 @@ VirtualPet/
    - **成长 / 等级**：喂食/玩耍/洗澡/送礼等正向互动积累经验，满则升级（升级有庆祝动画+音效+气泡），
      等级与经验显示在右键数值面板，并随存档保留。
    - **自定义皮肤支持动图**：创建皮肤时「按状态上传」可直接选一张 GIF/APNG，自动展开为该状态的多帧动画。
-   - **AI 绘图生成皮肤**：右键面板「AI皮肤」→ 填入你自己的 API Key（默认接入 Agnes AI，OpenAI 兼容，
-     可改接口地址）→ 选模型/尺寸、输入提示词 → 生成预览 → 「应用为皮肤」自动抠图并启用。
-     **Key 仅保存在本地、不入库**；窗口含版权声明，提示词会追加「原创/无品牌角色」等约束以规避侵权。
+   - **AI 绘图生成皮肤**：右键面板「AI皮肤」→ API Key（推荐填在 `.env` 的
+     `IMAGE_GEN_API_KEY`，窗口留空即可；默认接入 Agnes AI，OpenAI 兼容，可改接口地址）→
+     选模型/尺寸、输入角色描述 → 「生成整套皮肤」逐状态出图、自动抠图并启用为新皮肤。
+     提示词内置优化：强制**纯绿幕背景**（远离洋红色键，抠图干净无紫边）、统一朝向
+     （移动状态侧身朝右、其余正面）、追加「原创/无品牌角色」等防侵权约束。
+     **Key 仅保存在本地 `.env`、绝不入库**；窗口含版权声明。
    - 体力机制：仅在宠物移动（漫游/奔跑）时缓慢消耗，静止时缓慢回升，睡觉时回升更快；
      宠物会在疲倦时自主进入睡眠状态恢复体力，回满后自动醒来。
    - 聊天历史持久化：可见对话保存在 `data/chat_history.json`，重启后回填到聊天窗口。
@@ -207,8 +226,9 @@ python tools/build_exe.py      # 产物：dist/VirtualPet.exe
 - 打包采用 PyInstaller **onefile**：只读资源（动画/图片/声音、内置皮肤、行为/桌面/审查
   配置、AI 配置模板）打进 exe；运行期可写数据（存档、日志、`user_config`/`skin_config`、
   用户新建的皮肤）在**首次运行时自动生成在 exe 同级目录**（`ensure_user_data`）。
-- **绝不打包真实 API Key**：仅打包 `config/ai_config.template.json`（空 Key），首次运行据此
-  生成 `config/ai_config.json`；用户在设置窗口填入自己的 Key。
+- **绝不打包真实 API Key**：仅打包 `config/ai_config.template.json`（空 Key）与
+  `.env.example`（空模板），首次运行据此生成 `config/ai_config.json` 并把 `.env.example`
+  播种到 exe 旁；用户复制为 `.env` 填入自己的 Key（或在窗口里临时填）。
 - exe 图标由 `tools/make_icon.py` 取内置皮肤的一帧自动生成。
 - 体积控制：在干净虚拟环境（仅 `pygame / pywin32 / pystray / Pillow / numpy / pyinstaller`）
   里打包；`scipy`（仅皮肤网格切分的可选碎片剔除用到，缺失时自动降级）等大库已排除。

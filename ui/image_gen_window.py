@@ -38,6 +38,7 @@ class ImageGenWindow:
         self.model = settings.IMAGE_GEN_MODELS[0]
         self.size = settings.IMAGE_GEN_SIZES[0]
         self.prompt = ""
+        self.skin_name = ""  # 整套皮肤名（留空则自动用时间戳，每次生成各自独立）
 
         self.status = ""
         self.status_ok: Optional[bool] = None
@@ -57,6 +58,7 @@ class ImageGenWindow:
         self.api_key = config.get("api_key", "")
         self.model = config.get("model") or settings.IMAGE_GEN_MODELS[0]
         self.size = config.get("size") or settings.IMAGE_GEN_SIZES[0]
+        self.skin_name = ""  # 每次打开都清空：避免沿用上次的皮肤名造成覆盖
         self._focus = None
         self._open = None
         self.status = ""
@@ -126,7 +128,7 @@ class ImageGenWindow:
         for name, rect in self._hit_areas.items():
             if name.startswith("opt:") or not rect.collidepoint(pos):
                 continue
-            if name in ("base_url", "api_key", "prompt"):
+            if name in ("base_url", "api_key", "prompt", "skin_name"):
                 self._focus = name
                 pygame.key.set_text_input_rect(rect)
             elif name == "model":
@@ -136,8 +138,12 @@ class ImageGenWindow:
             elif name == "generate":
                 if not self.busy:
                     return {"action": "generate", "config": self.config(), "prompt": self.prompt.strip()}
-            elif name == "apply":
-                return {"action": "apply"}
+            elif name == "batch":
+                if not self.busy:
+                    return {
+                        "action": "batch", "config": self.config(),
+                        "prompt": self.prompt.strip(), "name": self.skin_name.strip(),
+                    }
             elif name == "close":
                 return self.close()
             return None
@@ -176,6 +182,7 @@ class ImageGenWindow:
         model_rect, y = self._dropdown_row(panel, y, "模型", "model", self.model)
         size_rect, y = self._dropdown_row(panel, y, "尺寸", "size", self.size)
         y = self._field_row(panel, y, "提示词", "prompt", self.prompt or "（描述你想要的宠物外观）")
+        y = self._field_row(panel, y, "皮肤名称", "skin_name", self.skin_name or "（留空自动命名）")
 
         # 版权声明（自动换行，灰色）
         from ui.message_box import wrap_text
@@ -267,13 +274,17 @@ class ImageGenWindow:
             panel.blit(self.font.render(line, True, color), (PADDING, y + i * self.font.get_linesize()))
 
     def _bottom_buttons(self, panel) -> None:
-        gen_label = "生成中..." if self.busy else "生成"
-        buttons = (("generate", gen_label), ("apply", "应用为皮肤"), ("close", "关闭"))
+        # 生成预览=单图确认角色；生成整套=逐状态出图并直接应用为皮肤
+        buttons = (
+            ("generate", "生成中..." if self.busy else "生成预览"),
+            ("batch", "生成整套皮肤"),
+            ("close", "关闭"),
+        )
         bw = (self.rect.width - (len(buttons) + 1) * PADDING) // len(buttons)
         y = self.rect.height - BUTTON_HEIGHT - PADDING
         for i, (name, text) in enumerate(buttons):
             rect = pygame.Rect(PADDING + i * (bw + PADDING), y, bw, BUTTON_HEIGHT)
-            disabled = name == "generate" and self.busy
+            disabled = self.busy and name in ("generate", "batch")
             bg = theme.FIELD_BG_COLOR if disabled else theme.BUTTON_BG_COLOR
             pygame.draw.rect(panel, bg, rect, border_radius=6)
             pygame.draw.rect(panel, theme.BUTTON_BORDER_COLOR, rect, 1, border_radius=6)
